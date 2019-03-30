@@ -3,11 +3,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <ctime>
 #include <limits>
 #include <iomanip>
 #include <iostream>
-#include <random>
 #include <map>
 #include <vector>
 
@@ -19,18 +17,17 @@
 1|3 4 5
 2|6 7 8
  |
-Row
-and move z(5) = (x(1), y(2))
+Row  => move z(5) = (x(1), y(2))
 */
 
-std::random_device RAND_DEVICE;
-std::mt19937 RAND_ENGINE(RAND_DEVICE());
-std::uniform_real_distribution<float> RAND_FLOAT(0.0f, 1.0f);
+#define ON_BOARD(row, col) (row >= 0 && row < BOARD_MAX_ROW && col >= 0 && col < BOARD_MAX_COL)
 
 constexpr int FIVE_IN_ROW = 4;
 constexpr int BOARD_MAX_ROW = 6;
 constexpr int BOARD_MAX_COL = 6;
 constexpr int BOARD_SIZE = BOARD_MAX_ROW * BOARD_MAX_COL;
+
+constexpr bool DEBUG_MCTS_NODE = false;
 
 enum class Color {Empty, Black, White};
 
@@ -54,31 +51,24 @@ inline std::ostream &operator<<(std::ostream &out, Color c) {
 	return out;
 }
 
+const int NO_MOVE_YET = -1;
+
 class Move {
 	int index;
 public:
-	Move() : index(-1) {}  // not move yet!
-	Move(int z) : index(z) {}
-	Move(int row, int col) {
-		assert(row >= 0 && row < BOARD_MAX_ROW && col >= 0 && col < BOARD_MAX_COL);
-		index = row * BOARD_MAX_COL + col;
+	Move(int z) : index(z) {
+		assert((z >= 0 && z < BOARD_SIZE) || z == NO_MOVE_YET);
+	}
+	Move(int row, int col) { 
+		assert(ON_BOARD(row, col));
+		index = row * BOARD_MAX_COL + col; 
 	}
 	Move(const Move &mv) : index(mv.z()) {}
-	int z() const {
-		return index;
-	}
-	int r() const {
-		return index / BOARD_MAX_COL;
-	}
-	int c() const {
-		return index % BOARD_MAX_COL;
-	}
-	bool operator<(const Move &right) const {
-		return index < right.index;
-	}
-	bool operator==(const Move &right) const {
-		return index == right.index;
-	}
+	int z() const { return index; }
+	int r() const { return index / BOARD_MAX_COL; }
+	int c() const { return index % BOARD_MAX_COL; }
+	bool operator<(const Move &right) const { return index < right.index; }
+	bool operator==(const Move &right) const { return index == right.index; }
 };
 
 inline std::ostream &operator<<(std::ostream &out, Move mv) {
@@ -87,30 +77,24 @@ inline std::ostream &operator<<(std::ostream &out, Move mv) {
 
 class Board {
 	Color grid[BOARD_SIZE];
-
 public:
 	Board() : grid{ Color::Empty } {}
-	Color get(Move mv) const {
+	Color get(Move mv) const { 
 		return grid[mv.z()];
 	}
 	void put(Move mv, Color c) {
-		assert(valid(mv));
+		assert(get(mv) == Color::Empty);
 		grid[mv.z()] = c;
 	}
-	bool within(Move mv) const {
-		return mv.z() >= 0 && mv.z() < BOARD_SIZE;
-	}
-	bool valid(Move mv) const {
-		return within(mv) && get(mv) == Color::Empty;
-	}
-	void options(std::vector<Move> &opts) const {
+	void push_valid(std::vector<Move> &set) const {
 		for (int i = 0; i < BOARD_SIZE; ++i)
 			if (get(Move(i)) == Color::Empty)
-				opts.push_back(Move(i));
-		std::shuffle(opts.begin(), opts.end(), RAND_ENGINE);
+				set.push_back(Move(i));
+		
+		std::random_shuffle(set.begin(), set.end());
 	}
-	bool win(Move mv) const {
-		if (mv == Move()) return false;
+	bool win_from(Move mv) const {
+		if (mv.z() == NO_MOVE_YET) return false;
 		Color side = get(mv);
 		assert(side != Color::Empty);
 		int direct[4][2] = { {0, 1}, {1, 0}, {-1, 1}, {1, 1} };
@@ -123,8 +107,7 @@ public:
 					++total;
 					auto r = probe.r() + d[0] * s;
 					auto c = probe.c() + d[1] * s;
-					if (!(r >= 0 && r < BOARD_MAX_ROW && c >= 0 && c < BOARD_MAX_COL))
-						break;
+					if (!ON_BOARD(r, c)) break;
 					probe = Move(r, c);
 				}
 			}
@@ -152,51 +135,47 @@ class State {
 	friend std::ostream &operator<<(std::ostream &out, const State &state);
 	Board board;
 	Move last;
+	Color winner;
 	std::vector<Move> opts;
 public:
-	State() {
-		board.options(opts);
+	State() : last(NO_MOVE_YET), winner(Color::Empty) { 
+		board.push_valid(opts); 
 	}
 	State(const State &state) = default;
-	~State() = default;
+	Move get_last() const { return last; }
+	Color get_winner() const { return winner; }
 	Color current() const {
-		if (last == Move())
+		if (last.z() == NO_MOVE_YET) 
 			return Color::Black;
 		return ~board.get(last);
 	}
-	Move lastmv() const { return last; }
-	const std::vector<Move> &getOpts() const {
-		assert(winner() == Color::Empty);
+	const std::vector<Move> &get_options() const {
+		assert(winner  == Color::Empty);
 		return opts;
-	}
-	Color winner() const {
-		if (board.win(last)) return ~current();
-		return Color::Empty;
 	}
 	bool valid(Move mv) const {
 		return std::find(opts.cbegin(), opts.cend(), mv) != opts.end();
 	}
 	bool over() const {
-		return opts.size() == 0 || winner() != Color::Empty;
+		return winner != Color::Empty || opts.size() == 0;
 	}
 	void next(Move mv) {
-		board.put(mv, current());
+		assert(valid(mv));
+		Color side = current();
+		board.put(mv, side);
+		if (board.win_from(mv)) winner = side;
 		last = mv;
-		auto choosed = std::find(opts.cbegin(), opts.cend(), mv);
-		assert(choosed !=  opts.end());
-		opts.erase(choosed);
+		opts.erase(std::find(opts.cbegin(), opts.cend(), mv));
 	}
-	Color nextRandTillEnd() {
-		while (!over()) {
-			auto randAct = opts[0];
-			next(randAct);
-		}	
-		return winner();
+	Color next_rand_till_end() {
+		while (!over()) 
+			next(opts[0]);
+		return winner;
 	}
 };
 
 inline std::ostream &operator<<(std::ostream &out, const State &state) {
-	if (state.last == Move())
+	if (state.last.z() == NO_MOVE_YET)
 		return out << state.board << "last move: None";
 	else
 		return out << state.board << "last move: " << ~state.current() << state.last;
@@ -216,39 +195,40 @@ public:
 		for (const auto &mn : children)
 			delete mn.second;	
 	}
-	void expand(const std::vector<std::pair<Move, float>> &mvPriors) {
-		for (auto &mvp : mvPriors) 
+	void expand(const std::vector<std::pair<Move, float>> &set) {
+		for (auto &mvp : set)
 			children[mvp.first] = new MCTSNode(this, mvp.second);
 	}
 	MCTSNode *cut(Move occurred) {
-		auto childIter = children.find(occurred);
-		assert(childIter != children.end());
-		auto child = childIter->second;
+		auto citer = children.find(occurred);
+		assert(citer != children.end());
+		auto child = citer->second;
 		children.erase(occurred);
 		child->parent = nullptr;
 		return child;
 	}
 	std::pair<Move, MCTSNode*> select(float c_puct) const {
-		std::pair<Move, MCTSNode*> picked(Move(), nullptr);
-		float maxValue = -1 * std::numeric_limits<float>::max();
+		std::pair<Move, MCTSNode*> picked(Move(NO_MOVE_YET), nullptr);
+		float max_value = -1 * std::numeric_limits<float>::max();
 		for (const auto &mn : children) {
-			auto value = mn.second->value(c_puct);
-			if (value > maxValue) {
+			float value = mn.second->value(c_puct);
+			if (value > max_value) {
 				picked = mn;
-				maxValue = value;
+				max_value = value;
 			}
 		}
 		return picked;
 	}
-	Move mostVisted() const {
-		int maxVisit = -1 * std::numeric_limits<int>::max();
-		Move act;
+	Move most_visted() const {
+		int max_visit = -1 * std::numeric_limits<int>::max();
+		Move act(NO_MOVE_YET);
 		for (const auto &mn : children) {
-			// std::cout << mn.first << *mn.second << std::endl;
-			auto vt = mn.second->visits;
-			if ((vt > maxVisit) || (vt == maxVisit && RAND_FLOAT(RAND_ENGINE) > 0.5f)) {
+			if (DEBUG_MCTS_NODE) 
+				std::cout << mn.first << ": " <<  *mn.second << std::endl;
+			auto vn = mn.second->visits;
+			if (vn > max_visit) {
 				act = mn.first;
-				maxVisit = vt;
+				max_visit = vn;
 			}
 		}
 		return act;
@@ -258,19 +238,19 @@ public:
 		float delta = (leafValue - quality) / float(visits);
 		quality += delta;
 	}
-	void updateRec(float leafValue) {
+	void update_recursive(float leafValue) {
 		if (parent != nullptr)
-			parent->updateRec(-1 * leafValue);
+			parent->update_recursive(-1 * leafValue);
 		update(leafValue);
 	}
 	float value(float c_puct) const {
-		assert(!isRoot());
+		assert(!is_root());
 		float N = float(parent->visits);
 		float n = float(1 + visits);
 		return quality + (c_puct * prior * std::sqrt(N) / n);
 	}
-	bool isLeaf() const { return children.size() == 0; }
-	bool isRoot() const { return parent == nullptr; }
+	bool is_leaf() const { return children.size() == 0; }
+	bool is_root() const { return parent == nullptr; }
 };
 
 inline std::ostream &operator<<(std::ostream &out, MCTSNode &node) {
