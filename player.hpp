@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 
+#include "mxnet-cpp/MxNetCpp.h"
 #include "game.hpp"
 
 struct Player {
@@ -111,7 +112,7 @@ public:
 	~HumanPlayer() {};		
 };
 
-class MTCSPurePlayer: public Player {
+class MCTSPurePlayer: public Player {
 	std::string id;
 	int itermax;
 	float c_puct;
@@ -121,11 +122,11 @@ class MTCSPurePlayer: public Player {
 		root = new_root;
 	}
 public:
-	MTCSPurePlayer(const char *name, int itermax=10000, float c_puct=5.0f)
+	MCTSPurePlayer(const char *name, int itermax=10000, float c_puct=5.0f)
 		: id(name), itermax(itermax), c_puct(c_puct){
 		root = new MCTSNode(nullptr, 1.0f);
 	}
-	~MTCSPurePlayer() { delete root; }
+	~MCTSPurePlayer() { delete root; }
 	const std::string &name() const override { return id; }
 	void reset() override {
 		delete root;
@@ -170,3 +171,143 @@ public:
 	}
 };
 
+//class MCTSDeepPlayer : public Player {
+//	std::string id;
+//	int itermax;
+//	float c_puct;
+//	MCTSNode *root;
+//	void swap_root(MCTSNode * new_root) {
+//		delete root;
+//		root = new_root;
+//	}
+//public:
+//	MCTSDeepPlayer(const char *name, int itermax = 10000, float c_puct = 5.0f)
+//		: id(name), itermax(itermax), c_puct(c_puct) {
+//		root = new MCTSNode(nullptr, 1.0f);
+//	}
+//	~MCTSDeepPlayer() { delete root; }
+//}
+
+class DeepNet {
+public:
+	using Symbol = mxnet::cpp::Symbol;
+	using Shape = mxnet::cpp::Shape;
+	using NDArray = mxnet::cpp::NDArray;
+	using Executor = mxnet::cpp::Executor;
+	using Context = mxnet::cpp::Context;
+
+	int num_filter;
+	int num_residual_block;
+	int batch_size;
+
+	const Context &ctx;
+	std::map<std::string, NDArray> args_map;
+	Executor *plc_eval, *val_eval, *loss_eval;
+
+	DeepNet(int filter=64, int res_block=5, int batch_size=8) :
+		    num_filter(filter), num_residual_block(res_block), batch_size(batch_size),
+			ctx(Context::cpu()){
+
+		auto middle = middle_layer(Symbol::Variable("data"));
+		auto plc_pair = plc_layer(middle, Symbol::Variable("plc_label"));
+		auto val_pair = val_layer(middle, Symbol::Variable("val_label"));
+		Symbol plc = plc_pair.first;
+		Symbol val = val_pair.first;
+		Symbol loss = plc_pair.second + val_pair.second;
+
+		args_map["data"] = NDArray(Shape(batch_size, 2, BOARD_MAX_ROW, BOARD_MAX_COL), ctx);
+		args_map["plc_label"] = NDArray(Shape(batch_size), ctx);
+		args_map["val_label"] = NDArray(Shape(batch_size, 1), ctx);
+		loss.InferArgsMap(ctx, &args_map, args_map);
+
+		plc_eval = plc.SimpleBind(ctx, args_map);
+		val_eval = val.SimpleBind(ctx, args_map);
+		loss_eval = loss.SimpleBind(ctx, args_map);
+	}
+	~DeepNet() {
+		delete plc_eval;
+		delete val_eval;
+		delete loss_eval;
+	}
+	void load_params() {
+	}
+	Symbol middle_layer(Symbol data) {
+		Symbol front_conv = convolution_layer("front_conv", data, 
+			num_filter, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
+		return residual_block("middle", front_conv, num_residual_block, num_filter);
+	}
+	std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
+		Symbol plc_conv = convolution_layer("plc_conv", data,
+			2, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, true);
+		Symbol plc_logist_out = dense_layer("plc_logist_out", plc_conv, BOARD_SIZE, "None");
+		Symbol plc_out = softmax("plc_out", plc_logist_out);
+		Symbol plc_loss = softmax_cross_entropy("plc_loss", plc_logist_out, label);
+		return std::make_pair(plc_out, plc_loss);
+	}
+	std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
+		Symbol val_conv = convolution_layer("val_conv", data,
+			1, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, true);
+		Symbol val_dense = dense_layer("val_dense", val_conv, num_filter, "relu");
+		Symbol val_out = dense_layer("val_logist_out", val_dense, 1, "tanh");
+		Symbol val_loss = sum(square(elemwise_sub("val_loss_sub", val_out, label)));
+		return std::make_pair(val_out, val_loss);
+	}
+	static Symbol dense_layer(const std::string &name, Symbol data,
+		                      int num_hidden, const std::string &act_type) {
+		Symbol w(name + "_w"), b(name + "_b");
+		Symbol out = FullyConnected("fc_" + name, data, w, b, num_hidden);
+		if (act_type != "None")
+			out = Activation("act_" + name, out, act_type);
+		return out;
+	}
+	static Symbol convolution_layer(const std::string &name, Symbol data,
+		                            int num_filter, Shape kernel, Shape stride, Shape pad,
+		                            bool use_act, bool use_bn) {
+		Symbol conv_w(name + "_w");
+		Symbol conv_b(name + "_b");
+		Symbol out = Convolution("conv_" + name, data, 
+			conv_w, conv_b, kernel, num_filter, stride, Shape(1, 1), pad);
+		if (use_bn) {
+			Symbol gamma(name + "_bn_gamma");
+			Symbol beta(name + "_bn_beta");
+			Symbol mmean(name + "_bn_mmean");
+			Symbol mvar(name + "_bn_mvar");
+			out = BatchNorm("bn_" + name, out, gamma, beta, mmean, mvar);
+		}
+		if (use_act)
+			out = Activation("relu_" + name, out, "relu");
+		return out;
+	}
+	static Symbol residual_layer(const std::string &name, Symbol data, 
+		                         int num_filter) {
+		Symbol conv1 = convolution_layer(name + "_conv1_layer", data, num_filter,
+			Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
+		Symbol conv2 = convolution_layer(name + "_conv2_layer", conv1, num_filter,
+			Shape(3, 3), Shape(1, 1), Shape(1, 1), false, true);
+		return Activation("relu_" + name, data + conv2, "relu");
+	}
+	static Symbol residual_block(const std::string &name, Symbol data, 
+		                         int num_block, int num_filter) {
+		Symbol out = data;
+		for (int i = 0; i < num_block; ++i)
+			out = residual_layer(name + "_block" + std::to_string(i + 1), out, num_filter);
+		return out;
+	}
+	static void display_shape(const NDArray &nd) {
+		std::cout << "Shape(";
+		auto shape = nd.GetShape();
+		for (int i = 0; i < shape.size(); ++i) {
+			if (i != 0) std::cout << ", ";
+			std::cout << shape.at(i);
+		}
+		std::cout << ")";
+	}
+	static void display_dict(const std::string &name, std::map<std::string, NDArray> &dict) {
+		std::cout << "******* " << name << " *******" << std::endl;
+		for (const auto &pair : dict) {
+			std::cout << pair.first << " => ";
+			display_shape(pair.second);
+			std::cout << std::endl;
+		}
+	}
+};
