@@ -65,7 +65,7 @@ public:
 	Move get_last() const { return last; }
 	Color get_winner() const { return winner; }
 	Color current() const;
-	std::vector<float> to_matrix() const;
+	void State::fill_feature_array(float data[2 * BOARD_SIZE]) const;
 	const std::vector<Move> &get_options() const { assert(winner == Color::Empty); return opts; };
 	bool valid(Move mv) const { return std::find(opts.cbegin(), opts.cend(), mv) != opts.end(); }
 	bool over() const { return winner != Color::Empty || opts.size() == 0; }

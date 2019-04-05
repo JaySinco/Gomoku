@@ -81,8 +81,7 @@ Color State::current() const {
 	return ~board.get(last);
 }
 
-std::vector<float> State::to_matrix() const {
-	std::vector<float> data(2 * BOARD_SIZE, 0.0f);
+void State::fill_feature_array(float data[2 * BOARD_SIZE]) const {
 	auto own_side = current();
 	auto enemy_side = ~own_side;
 	for (int r = 0; r < BOARD_MAX_ROW; ++r) {
@@ -94,7 +93,6 @@ std::vector<float> State::to_matrix() const {
 				data[BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
 		}
 	}
-	return data;
 }
 
 void State::next(Move mv) {
