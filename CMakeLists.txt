@@ -1,10 +1,12 @@
-cmake_minimum_required(VERSION 3.10.1)
+cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 project(gomoku)
 
-include_directories(D:/Jaysinco/Cxx/include)
-link_directories(D:/Jaysinco/Cxx/lib)
 add_compile_options(/W1 /D_SCL_SECURE_NO_WARNINGS)
+include_directories(include D:/Jaysinco/Cxx/include)
+link_directories(D:/Jaysinco/Cxx/lib)
 
-add_executable(gomoku main.cc game.hpp player.hpp)
-target_link_libraries(gomoku libmxnet.lib)
+add_executable(gomoku src/main.cc src/mcts.cc src/engine.cc src/network.cc 
+                      include/mcts.h include/engine.h include/network.h)
+set_property(TARGET gomoku PROPERTY CXX_STANDARD 11)
+target_link_libraries(gomoku libmxnet.lib) 
