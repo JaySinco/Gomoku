@@ -32,9 +32,11 @@ std::pair<Move, MCTSNode*> MCTSNode::select(float c_puct) const {
 	return picked;
 }
 
-Move MCTSNode::most_visted() const {
+Move MCTSNode::most_visted(float mcts_move_priors[BOARD_SIZE]) const {
 	int max_visit = -1 * std::numeric_limits<int>::max();
 	Move act(NO_MOVE_YET);
+	if (DEBUG_MCTS_MODE)
+		std::cout << "(ROOT): " << *this << std::endl;
 	for (const auto &mn : children) {
 		if (DEBUG_MCTS_MODE)
 			std::cout << mn.first << ": " << *mn.second << std::endl;
@@ -43,6 +45,8 @@ Move MCTSNode::most_visted() const {
 			act = mn.first;
 			max_visit = vn;
 		}
+		if (mcts_move_priors != nullptr)
+			mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
 	}
 	return act;
 }
@@ -66,7 +70,7 @@ float MCTSNode::value(float c_puct) const {
 	return quality + (c_puct * prior * std::sqrt(N) / n);
 }
 
-std::ostream &operator<<(std::ostream &out, MCTSNode &node) {
+std::ostream &operator<<(std::ostream &out, const MCTSNode &node) {
 	return out << "MCTSNode(" << node.parent << "): "
 		<< node.children.size() << " children, " << node.visits << " visits, "
 		<< node.prior << " prior, " << node.quality << " quality";
@@ -115,7 +119,7 @@ Move MCTSPurePlayer::play(const State &state) {
 			leaf_value = 0.0f;;
 		node->update_recursive(leaf_value);
 	}
-	Move act = root->most_visted();
+	Move act = root->most_visted(nullptr);
 	swap_root(root->cut(act));
 	return act;
 }
@@ -123,7 +127,7 @@ Move MCTSPurePlayer::play(const State &state) {
 MCTSDeepPlayer::MCTSDeepPlayer(const char *name, int itermax, float c_puct)
 	: id(name), itermax(itermax), c_puct(c_puct), net() {
 	root = new MCTSNode(nullptr, 1.0f);
-	net = new FIRNet("None", 64, 2, 8);
+	net = new FIRNet("None");
 }
 
 void MCTSDeepPlayer::reset() {
@@ -145,9 +149,9 @@ Move MCTSDeepPlayer::play(const State &state) {
 		float leaf_value;
 		Color winner = state_copied.get_winner();
 		if (winner == Color::Empty) {
-			std::vector<std::pair<Move, float>> move_priors;
-			net->forward(state_copied, nullptr, &leaf_value, move_priors);
-			node->expand(move_priors);
+			std::vector<std::pair<Move, float>> net_move_priors;
+			net->forward(state_copied, nullptr, &leaf_value, net_move_priors);
+			node->expand(net_move_priors);
 			leaf_value *= -1;
 		}
 		else {
@@ -161,7 +165,7 @@ Move MCTSDeepPlayer::play(const State &state) {
 		}
 		node->update_recursive(leaf_value);
 	}
-	Move act = root->most_visted();
+	Move act = root->most_visted(nullptr);
 	swap_root(root->cut(act));
 	return act;
 }

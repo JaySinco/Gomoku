@@ -11,11 +11,11 @@ int main() {
 	auto p2 = HumanPlayer("jaysinco");
 	
 	auto p3 = RandomPlayer("p3");
-	auto p4 = MCTSPurePlayer("mcts1", 10000);
+	auto p4 = MCTSPurePlayer("mcts_pure");
 	auto p5 = HumanPlayer("girl");
-	auto p6 = MCTSDeepPlayer("mcts2", 500);
-	//play(p6, p2, false);
-	//benchmark(p4, p6, 10, false);
+	auto p6 = MCTSDeepPlayer("mcts_deep");
+	//play(p4, p2, false);
+	benchmark(p4, p6, 10, false);
 }
 
 //#include "network.h"
