@@ -2,7 +2,32 @@
 #include "engine.h"
 
 constexpr int BATCH_SIZE = 8;
+constexpr int BUFFER_SIZE = 1000;
 constexpr float LEARNING_RATE = 2e-3;
+
+struct SampleData {
+	float data[2 * BOARD_SIZE] = { 0.0f };
+	float p_label[BOARD_SIZE] = { 0.0f };
+	float v_label[1] = { 0.0f };
+};
+std::ostream &operator<<(std::ostream &out, const SampleData &sample);
+
+struct MiniBatch {
+	float data[BATCH_SIZE * 2 * BOARD_SIZE] = { 0.0f };
+	float p_label[BATCH_SIZE * BOARD_SIZE] = { 0.0f };
+	float v_label[BATCH_SIZE * 1] = { 0.0f };
+};
+
+class DataSet {
+public:
+	long long index;
+	SampleData *buf;
+public:
+	DataSet() : index(0) { buf = new SampleData[BUFFER_SIZE]; }
+	~DataSet() { delete [] buf; }
+	void push_back(const SampleData *data) { buf[index % BUFFER_SIZE] = *data; ++index; }
+	void make_mini_batch(MiniBatch *batch) const;
+};
 
 class FIRNet {
 	using Symbol = mxnet::cpp::Symbol;
@@ -24,7 +49,5 @@ public:
 	void save_parameters(const std::string &file_name);
 	void forward(const State &state, float data[2 * BOARD_SIZE], 
 		float value[1], std::vector<std::pair<Move, float>> &move_priors);
-	void train_step(const float data[BATCH_SIZE * 2 * BOARD_SIZE], 
-		const float p_label[BATCH_SIZE * BOARD_SIZE],
-		const float v_label[BATCH_SIZE * 1]);
+	void train_step(const MiniBatch *batch);
 };

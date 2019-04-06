@@ -1,6 +1,42 @@
+#include <iomanip>
 #include "network.h"
 
 using namespace mxnet::cpp;
+
+std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
+	for (int row = 0; row < BOARD_MAX_ROW; ++row) {
+		for (int col = 0; col < BOARD_MAX_COL; ++col) {
+			if (sample.data[row * BOARD_MAX_COL + col] > 0)
+				std::cout << "¡ñ";
+			else if (sample.data[BOARD_SIZE + row * BOARD_MAX_COL + col] > 0)
+				std::cout << "¡ð";
+			else
+				std::cout << "  ";
+		}
+		std::cout << "£ü";
+		for (int col = 0; col < BOARD_MAX_COL; ++col)
+			std::cout << " " << std::setw(5) << std::fixed << std::setprecision(1)
+				<< sample.p_label[row * BOARD_MAX_COL + col] * 100 << "%,";
+		std::cout << std::endl;
+	}
+	for (int i = 0; i < 2 * BOARD_MAX_COL; ++i)
+		std::cout << "-";
+	std::cout << "¡üVALUE = " << sample.v_label[0] << std::endl;
+	return out;
+}
+
+void DataSet::make_mini_batch(MiniBatch *batch) const {
+	assert(index > BATCH_SIZE);
+	int imin = 0;
+	int imax = (index > BUFFER_SIZE) ? BUFFER_SIZE : index;
+	for (int i = 0; i < BATCH_SIZE; i++) {
+		int c = rand() % (imax - imin) + imin;
+		SampleData *r = buf + c;
+		std::copy(std::begin(r->data), std::end(r->data), batch->data + 2 * BOARD_SIZE * i);
+		std::copy(std::begin(r->p_label), std::end(r->p_label), batch->p_label + BOARD_SIZE * i);
+		std::copy(std::begin(r->v_label), std::end(r->v_label), batch->v_label + i);
+	}
+}
 
 Symbol dense_layer(const std::string &name, Symbol data,
 		int num_hidden, const std::string &act_type) {
@@ -62,8 +98,8 @@ std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 		2, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
 	Symbol plc_logist_out = dense_layer("plc_logist_out", plc_conv, BOARD_SIZE, "None");
 	Symbol plc_out = softmax("plc_out", plc_logist_out);
-	Symbol plc_m_loss = elemwise_mul(label, log_softmax(plc_logist_out));
-	Symbol plc_loss = mean(sum(plc_m_loss, dmlc::optional<Shape>(Shape(1))));
+	Symbol plc_m_loss = -1 * elemwise_mul(label, log_softmax(plc_logist_out));
+	Symbol plc_loss = MakeLoss(mean(sum(plc_m_loss, dmlc::optional<Shape>(Shape(1)))));
 	return std::make_pair(plc_out, plc_loss);
 }
 
@@ -72,7 +108,7 @@ std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 		1, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
 	Symbol val_dense = dense_layer("val_dense", val_conv, 64, "relu");
 	Symbol val_out = dense_layer("val_logist_out", val_dense, 1, "tanh");
-	Symbol val_loss = mean(square(elemwise_sub(val_out, label)));
+	Symbol val_loss = MakeLoss(mean(square(elemwise_sub(val_out, label))));
 	return std::make_pair(val_out, val_loss);
 }
 
@@ -143,12 +179,10 @@ void FIRNet::forward(const State &state, float data[2 * BOARD_SIZE],
 	value[0] = val_predict->outputs[0].GetData()[0];
 }
 
-void FIRNet::train_step(const float data[BATCH_SIZE * 2 * BOARD_SIZE],
-		const float p_label[BATCH_SIZE * BOARD_SIZE],
-		const float v_label[BATCH_SIZE * 1]) {
-	data_train.SyncCopyFromCPU(data, BATCH_SIZE * 2 * BOARD_SIZE);
-	plc_label.SyncCopyFromCPU(p_label, BATCH_SIZE * BOARD_SIZE);
-	val_label.SyncCopyFromCPU(v_label, BATCH_SIZE);
+void FIRNet::train_step(const MiniBatch *batch) {
+	data_train.SyncCopyFromCPU(batch->data, BATCH_SIZE * 2 * BOARD_SIZE);
+	plc_label.SyncCopyFromCPU(batch->p_label, BATCH_SIZE * BOARD_SIZE);
+	val_label.SyncCopyFromCPU(batch->v_label, BATCH_SIZE);
 	loss_train->Forward(true);
 	loss_train->Backward();
 	for (int i = 0; i < loss_arg_names.size(); ++i) {

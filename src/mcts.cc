@@ -169,3 +169,67 @@ Move MCTSDeepPlayer::play(const State &state) {
 	swap_root(root->cut(act));
 	return act;
 }
+
+void train_mcts_deep(FIRNet *net, int itermax, float c_puct) {
+	DataSet dataset;
+	for (;;) {
+		State game;
+		MCTSNode *root = new MCTSNode(nullptr, 1.0f);
+		std::vector<SampleData> record;
+		float ind = -1.0f;
+		while (!game.over()) {
+			ind *= -1.0f;
+			SampleData one_step;
+			*one_step.v_label = ind;
+			game.fill_feature_array(one_step.data);
+			for (int i = 0; i < itermax; ++i) {
+				State state_copied(game);
+				MCTSNode *node = root;
+				while (!node->is_leaf()) {
+					auto move_node = node->select(c_puct);
+					node = move_node.second;
+					state_copied.next(move_node.first);
+				}
+				float leaf_value;
+				Color winner = state_copied.get_winner();
+				if (winner == Color::Empty) {
+					std::vector<std::pair<Move, float>> net_move_priors;
+					net->forward(state_copied, nullptr, &leaf_value, net_move_priors);
+					node->expand(net_move_priors);
+					leaf_value *= -1;
+				}
+				else {
+					Color enemy_side = state_copied.current();
+					if (winner == enemy_side)
+						leaf_value = -1.0f;
+					else if (winner == ~enemy_side)
+						leaf_value = 1.0f;
+					else
+						leaf_value = 0.0f;;
+				}
+				node->update_recursive(leaf_value);
+			}
+			Move act = root->most_visted(one_step.p_label);
+			record.push_back(one_step);
+			game.next(act);
+			auto temp = root->cut(act);
+			delete root; 
+			root = temp;
+		}
+		delete root;
+		if (game.get_winner() != Color::Empty) {
+			if (ind < 0) 
+				for (auto &step : record) (*step.v_label) *= -1;	
+		} 
+		else {
+			for (auto &step : record) (*step.v_label) = 0.0f;
+		}
+		for (const auto &step : record) {
+			// to-do: transform
+			dataset.push_back(&step);
+			std::cout << step;
+		}
+		// to-do: train network
+		break;
+	}
+}

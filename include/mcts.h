@@ -51,9 +51,11 @@ class MCTSDeepPlayer : public Player {
 	FIRNet *net;
 	void swap_root(MCTSNode * new_root) { delete root; root = new_root; }
 public:
-	MCTSDeepPlayer(const char *name, int itermax = 800, float c_puct = 5.0f);
+	MCTSDeepPlayer(const char *name, int itermax = 1500, float c_puct = 4.0f);
 	~MCTSDeepPlayer() { delete root; delete net;  }
 	const std::string &name() const override { return id; }
 	void reset() override;
 	Move play(const State &state) override;
 };
+
+void train_mcts_deep(FIRNet *net, int itermax = 800, float c_puct = 5.0f);

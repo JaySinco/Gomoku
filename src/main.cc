@@ -6,20 +6,22 @@
 
 int main() {
 	std::srand(std::time(0));
+	//std::srand(1);
 
-	auto p1 = RandomPlayer("p1");
-	auto p2 = HumanPlayer("jaysinco");
-	
-	auto p3 = RandomPlayer("p3");
-	auto p4 = MCTSPurePlayer("mcts_pure");
-	auto p5 = HumanPlayer("girl");
-	auto p6 = MCTSDeepPlayer("mcts_deep");
-	//play(p4, p2, false);
-	benchmark(p4, p6, 10, false);
+	//auto p1 = RandomPlayer("p1");
+	//auto p2 = HumanPlayer("jaysinco");
+	//
+	//auto p3 = RandomPlayer("p3");
+	//auto p4 = MCTSPurePlayer("mcts_pure");
+	//auto p5 = HumanPlayer("girl");
+	//auto p6 = MCTSDeepPlayer("mcts_deep");
+	//play(p6, p2, false);
+	//benchmark(p4, p6, 10, false);
+	FIRNet net;
+	train_mcts_deep(&net, 100);
 }
 
-//#include "network.h"
-//
+//#include <mxnet-cpp/MxNetCpp.h>
 //using namespace mxnet::cpp;
 //
 //void display_shape(const NDArray &nd) {
@@ -42,39 +44,49 @@ int main() {
 //}
 //
 //void main() {
-//	//Symbol x("x"), y("y");
-//	//Symbol plc_m_loss = elemwise_mul(y, log_softmax(x));
-//	//Symbol y1 = sum(plc_m_loss, dmlc::optional<Shape>(Shape(1)));
+//	Symbol x("x"), yb("yb");
+//	Symbol w("w"), b("b");
+//	Symbol y = FullyConnected("fc", x, w, b, 1);
+//	Symbol loss = MakeLoss(mean(square(elemwise_sub(y, yb))));
+//	std::map<std::string, NDArray> args_map;
+//	auto ctx = Context::cpu();
 //
-//	//std::map<std::string, NDArray> args_map;
-//	//auto ctx = Context::cpu();
+//	float X1[1*2] = { 1, 1};
+//	float X2[3 * 2] = { 1, 2, 3, 4, 5, 6 };
+//	float Y[3*1] = { .4, .5, .6 };
+//	float W[1 * 2] = { .2, .3 };
+//	float B[1] = { 0.5 };
 //
-//	//float X[6] = { 1, 1, 2, 3, 3, 4 };
-//	//args_map["x"] = NDArray(&X[0], Shape(2, 3), ctx);
+//	auto ylabel = NDArray(&Y[0], Shape(2, 3), ctx);
 //
-//	//float Y[6] = { 2, 2, 3, 5, 5, 6 };
-//	//args_map["y"] = NDArray(&Y[0], Shape(2, 3), ctx);
-//	//
-//	//
-//	////std::cout << args_map["x"] << std::endl;
+//	args_map["x"] = NDArray(&X2[0], Shape(3, 2), ctx);
+//	args_map["yb"] = NDArray(&Y[0], Shape(3, 1), ctx);
+//	loss.InferArgsMap(ctx, &args_map, args_map);
+//	display_dict("args_map", args_map);
+//	args_map["w"].SyncCopyFromCPU(W, 2);
+//	args_map["b"].SyncCopyFromCPU(B, 1);
+//	auto *loss_exec = loss.SimpleBind(ctx, args_map);
+//	args_map["x"] = NDArray(&X1[0], Shape(1, 2), ctx); 
+//	auto *predict_exec = y.SimpleBind(ctx, args_map);
+//	const float learning_rate = 0.01;
+//	Optimizer* opt = OptimizerRegistry::Find("sgd");
+//	opt->SetParam("lr", learning_rate);
 //
-//	//y1.InferArgsMap(ctx, &args_map, args_map);
+//	loss_exec->Forward(true);
+//	loss_exec->Backward();
 //
-//	//display_dict("args_map1", args_map);
-//	//auto *exec = y1.SimpleBind(ctx, args_map);
-//
-//	//exec->Forward(false);
-//
-//	//std::cout << "out: " << exec->outputs[0] << std::endl;
-//
-//	FIRNet net;
-//	float value;
-//	std::vector<std::pair<Move, float>> policy;
-//	State game;
-//	game.next(Move(1, 2));
-//	net.forward(game, nullptr, &value, policy);
-//	std::cout << value << std::endl;
-//	for (auto &p : policy) {
-//		std::cout << p.first << " " << p.second << std::endl;
+//	NDArray::WaitAll();
+//	std::cout << "loss_exec: " << loss_exec->outputs[0] << std::endl;
+//	
+//	auto loss_arg_names = loss.ListArguments();
+//	for (int i = 0; i < loss_arg_names.size(); ++i) {
+//		if (loss_arg_names[i] == "x" || loss_arg_names[i] == "yb")
+//			continue;
+//		std::cout << "**" << loss_exec->arg_arrays[i] << " " << loss_exec->grad_arrays[i] << std::endl;
+//		opt->Update(i, loss_exec->arg_arrays[i], loss_exec->grad_arrays[i]);
 //	}
+//	NDArray::WaitAll();
+//
+//	predict_exec->Forward(false);
+//	std::cout << "predict_exec: " << predict_exec->outputs[0] << std::endl;
 //}
