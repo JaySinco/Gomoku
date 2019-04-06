@@ -3,32 +3,82 @@
 
 using namespace mxnet::cpp;
 
+
+float data[2 * BOARD_SIZE] = { 0.0f };
+float p_label[BOARD_SIZE] = { 0.0f };
+float v_label[1] = { 0.0f };
+
+void SampleData::flip_verticing() {
+	for (int row = 0; row < BOARD_MAX_ROW; ++row) {
+		for (int col = 0; col < BOARD_MAX_COL / 2; ++col) {
+			int a = row * BOARD_MAX_COL + col;
+			int b = row * BOARD_MAX_COL + BOARD_MAX_COL - col - 1;
+			std::iter_swap(data + a, data + b);
+			std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
+			std::iter_swap(p_label + a, p_label + b);
+		}
+	}
+}
+
+void SampleData::transpose() {
+	assert(BOARD_MAX_ROW == BOARD_MAX_COL);
+	for (int row = 0; row < BOARD_MAX_ROW; ++row) {
+		for (int col = row + 1; col < BOARD_MAX_COL; ++col) {
+			int a = row * BOARD_MAX_COL + col;
+			int b = col * BOARD_MAX_COL + row;
+			std::iter_swap(data + a, data + b);
+			std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
+			std::iter_swap(p_label + a, p_label + b);
+		}
+	}
+}
+
 std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
 	for (int row = 0; row < BOARD_MAX_ROW; ++row) {
 		for (int col = 0; col < BOARD_MAX_COL; ++col) {
 			if (sample.data[row * BOARD_MAX_COL + col] > 0)
-				std::cout << "¡ñ";
+				out << "¡ñ";
 			else if (sample.data[BOARD_SIZE + row * BOARD_MAX_COL + col] > 0)
-				std::cout << "¡ð";
+				out << "¡ð";
 			else
-				std::cout << "  ";
+				out << "  ";
 		}
-		std::cout << "£ü";
+		out << "£ü";
 		for (int col = 0; col < BOARD_MAX_COL; ++col)
-			std::cout << " " << std::setw(5) << std::fixed << std::setprecision(1)
+			out << " " << std::setw(5) << std::fixed << std::setprecision(1)
 				<< sample.p_label[row * BOARD_MAX_COL + col] * 100 << "%,";
-		std::cout << std::endl;
+		out << std::endl;
 	}
 	for (int i = 0; i < 2 * BOARD_MAX_COL; ++i)
-		std::cout << "-";
-	std::cout << "¡üVALUE = " << sample.v_label[0] << std::endl;
+		out << "-";
+	out << "¡üVALUE = " << sample.v_label[0] << std::endl;
 	return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const MiniBatch &batch) {
+	for (int i = 0; i < BATCH_SIZE; ++i) {
+		SampleData item;
+		std::copy(batch.data + i * 2 * BOARD_SIZE, batch.data + (i + 1) * 2 * BOARD_SIZE, item.data);
+		std::copy(batch.p_label + i * BOARD_SIZE, batch.p_label + (i + 1) * BOARD_SIZE, item.p_label);
+		std::copy(batch.v_label + i, batch.v_label + (i + 1), item.v_label);
+		out << item << std::endl;
+	}
+	return out;
+}
+
+void DataSet::push_with_transform(SampleData *data) {
+	for (int i = 0; i < 4; ++i) {
+		data->transpose();
+		push_back(data);
+		data->flip_verticing();
+		push_back(data);
+	}
 }
 
 void DataSet::make_mini_batch(MiniBatch *batch) const {
 	assert(index > BATCH_SIZE);
 	int imin = 0;
-	int imax = (index > BUFFER_SIZE) ? BUFFER_SIZE : index;
+	int imax = size();
 	for (int i = 0; i < BATCH_SIZE; i++) {
 		int c = rand() % (imax - imin) + imin;
 		SampleData *r = buf + c;
@@ -37,6 +87,13 @@ void DataSet::make_mini_batch(MiniBatch *batch) const {
 		std::copy(std::begin(r->v_label), std::end(r->v_label), batch->v_label + i);
 	}
 }
+
+std::ostream &operator<<(std::ostream &out, const DataSet &set) {
+	for (int i = 0; i < set.size(); ++i)
+		out << set.get(i) << std::endl;
+	return out;
+}
+
 
 Symbol dense_layer(const std::string &name, Symbol data,
 		int num_hidden, const std::string &act_type) {
@@ -112,7 +169,7 @@ std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 	return std::make_pair(val_out, val_loss);
 }
 
-FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
+FIRNet::FIRNet(const char *param_file) :ctx(Context::cpu()),
 		data_predict(NDArray(Shape(1, 2, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		data_train(NDArray(Shape(BATCH_SIZE, 2, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		plc_label(NDArray(Shape(BATCH_SIZE, BOARD_SIZE), ctx)),
@@ -124,7 +181,7 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	val = val_pair.first;
 	loss = plc_pair.second + val_pair.second;
 	if (param_file != "None") {
-		LOG(INFO) << "loading parameters from " << param_file << std::endl;
+		LOG(INFO) << "loading parameters from " << param_file;
 		NDArray::Load(param_file, nullptr, &args_map);
 	}
 	loss_arg_names = loss.ListArguments();
@@ -157,7 +214,7 @@ FIRNet::~FIRNet() {
 }
 
 void FIRNet::save_parameters(const std::string &file_name) {
-	LOG(INFO) << "saving parameters into " << file_name << std::endl;
+	LOG(INFO) << "saving parameters into " << file_name;
 	NDArray::Save(file_name, args_map);
 }
 
@@ -179,7 +236,7 @@ void FIRNet::forward(const State &state, float data[2 * BOARD_SIZE],
 	value[0] = val_predict->outputs[0].GetData()[0];
 }
 
-void FIRNet::train_step(const MiniBatch *batch) {
+float FIRNet::train_step(const MiniBatch *batch) {
 	data_train.SyncCopyFromCPU(batch->data, BATCH_SIZE * 2 * BOARD_SIZE);
 	plc_label.SyncCopyFromCPU(batch->p_label, BATCH_SIZE * BOARD_SIZE);
 	val_label.SyncCopyFromCPU(batch->v_label, BATCH_SIZE);
@@ -192,4 +249,5 @@ void FIRNet::train_step(const MiniBatch *batch) {
 		optimizer->Update(i, loss_train->arg_arrays[i], loss_train->grad_arrays[i]);
 	}
 	NDArray::WaitAll();
+	return loss_train->outputs[0].GetData()[0];
 }

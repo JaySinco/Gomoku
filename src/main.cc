@@ -5,7 +5,7 @@
 #include "mcts.h"
 
 int main() {
-	std::srand(std::time(0));
+	//std::srand(std::time(0));
 	//std::srand(1);
 
 	//auto p1 = RandomPlayer("p1");
@@ -17,8 +17,14 @@ int main() {
 	//auto p6 = MCTSDeepPlayer("mcts_deep");
 	//play(p6, p2, false);
 	//benchmark(p4, p6, 10, false);
-	FIRNet net;
-	train_mcts_deep(&net, 100);
+	//MCTSDeepPlayer p1("p1", "FIR-6x6o4_50.param", 5000);
+	MCTSDeepPlayer p2("p2", "FIR-6x6o4_18000.param", 10000);
+	//auto p4 = MCTSPurePlayer("mcts_pure", 5000);
+	auto p5 = HumanPlayer("jaysinco");
+	play(p5, p2, false);
+	//benchmark(p2, p5, 10, false);
+	//FIRNet net("FIR-6x6o4_18000.param");
+	//train_mcts_deep(&net);
 }
 
 //#include <mxnet-cpp/MxNetCpp.h>
