@@ -7,13 +7,13 @@
 std::mt19937 global_random_engine(1);
 
 int main() {
+	auto net = std::make_shared<FIRNet>();
 	//auto p1 = RandomPlayer("p1");
 	//auto p2 = HumanPlayer("jaysinco");
 	//auto p3 = MCTSPurePlayer("mcts_pure");
-	//auto p4 = MCTSDeepPlayer("mcts_deep");
-	//play(p6, p2, false);
+	//auto p4 = MCTSDeepPlayer("mcts_deep", net);
+	//play(p4, p2, false);
 	//benchmark(p4, p6, 10, false);
-	auto net = std::make_shared<FIRNet>();
 	train_mcts_deep(net);
 }
 
