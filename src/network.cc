@@ -77,10 +77,9 @@ void DataSet::push_with_transform(SampleData *data) {
 
 void DataSet::make_mini_batch(MiniBatch *batch) const {
 	assert(index > BATCH_SIZE);
-	int imin = 0;
-	int imax = size();
+	std::uniform_int_distribution<int> uniform(0, size() - 1);
 	for (int i = 0; i < BATCH_SIZE; i++) {
-		int c = rand() % (imax - imin) + imin;
+		int c = uniform(global_random_engine);
 		SampleData *r = buf + c;
 		std::copy(std::begin(r->data), std::end(r->data), batch->data + 2 * BOARD_SIZE * i);
 		std::copy(std::begin(r->p_label), std::end(r->p_label), batch->p_label + BOARD_SIZE * i);
@@ -169,7 +168,7 @@ std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 	return std::make_pair(val_out, val_loss);
 }
 
-FIRNet::FIRNet(const char *param_file) :ctx(Context::cpu()),
+FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 		data_predict(NDArray(Shape(1, 2, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		data_train(NDArray(Shape(BATCH_SIZE, 2, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		plc_label(NDArray(Shape(BATCH_SIZE, BOARD_SIZE), ctx)),
@@ -218,12 +217,9 @@ void FIRNet::save_parameters(const std::string &file_name) {
 	NDArray::Save(file_name, args_map);
 }
 
-void FIRNet::forward(const State &state, float data[2 * BOARD_SIZE],
+void FIRNet::forward(const State &state, 
 		float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
-	if (data == nullptr) {
-		float temp[2 * BOARD_SIZE] = { 0.0f };
-		data = temp;
-	}
+	float data[2 * BOARD_SIZE] = { 0.0f };
 	state.fill_feature_array(data);
 	data_predict.SyncCopyFromCPU(data, 2 * BOARD_SIZE);
 	plc_predict->Forward(false);

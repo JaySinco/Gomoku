@@ -1,30 +1,20 @@
 #include <iostream>
 
-#include <ctime>
 #include "engine.h"
 #include "mcts.h"
 
-int main() {
-	//std::srand(std::time(0));
-	//std::srand(1);
 
+std::mt19937 global_random_engine(1);
+
+int main() {
 	//auto p1 = RandomPlayer("p1");
 	//auto p2 = HumanPlayer("jaysinco");
-	//
-	//auto p3 = RandomPlayer("p3");
-	//auto p4 = MCTSPurePlayer("mcts_pure");
-	//auto p5 = HumanPlayer("girl");
-	//auto p6 = MCTSDeepPlayer("mcts_deep");
+	//auto p3 = MCTSPurePlayer("mcts_pure");
+	//auto p4 = MCTSDeepPlayer("mcts_deep");
 	//play(p6, p2, false);
 	//benchmark(p4, p6, 10, false);
-	//MCTSDeepPlayer p1("p1", "FIR-6x6o4_50.param", 5000);
-	MCTSDeepPlayer p2("p2", "FIR-6x6o4_18000.param", 10000);
-	//auto p4 = MCTSPurePlayer("mcts_pure", 5000);
-	auto p5 = HumanPlayer("jaysinco");
-	play(p5, p2, false);
-	//benchmark(p2, p5, 10, false);
-	//FIRNet net("FIR-6x6o4_18000.param");
-	//train_mcts_deep(&net);
+	auto net = std::make_shared<FIRNet>();
+	train_mcts_deep(net);
 }
 
 //#include <mxnet-cpp/MxNetCpp.h>

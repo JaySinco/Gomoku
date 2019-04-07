@@ -19,7 +19,8 @@ public:
 	void expand(const std::vector<std::pair<Move, float>> &set);
 	MCTSNode *cut(Move occurred);
 	std::pair<Move, MCTSNode*> select(float c_puct) const;
-	Move most_visted(float mcts_move_priors[BOARD_SIZE]) const;
+	Move most_visted() const;
+	Move act_by_prob(float mcts_move_priors[BOARD_SIZE]) const;
 	void update(float leafValue);
 	void update_recursive(float leafValue);
 	float value(float c_puct) const;
@@ -35,7 +36,7 @@ class MCTSPurePlayer: public Player {
 	MCTSNode *root;
 	void swap_root(MCTSNode * new_root) { delete root; root = new_root; }
 public:
-	MCTSPurePlayer(const char *name, int itermax = 8192, float c_puct = 5.0f);
+	MCTSPurePlayer(const std::string &name, int itermax = 8192, float c_puct = 5.0f);
 	~MCTSPurePlayer() { delete root; }
 	const std::string &name() const override { return id; }
 	void reset() override;
@@ -48,15 +49,16 @@ class MCTSDeepPlayer : public Player {
 	int itermax;
 	float c_puct;
 	MCTSNode *root;
-	FIRNet *net;
+	std::shared_ptr<FIRNet> net;
 	void swap_root(MCTSNode * new_root) { delete root; root = new_root; }
 public:
-	MCTSDeepPlayer(const char *name, const char *net_param_file = "None", int itermax = 1024, float c_puct = 5.0f);
-	~MCTSDeepPlayer() { delete root; delete net;  }
+	MCTSDeepPlayer(const std::string &name, std::shared_ptr<FIRNet> nn, int itermax = 8192, float c_puct = 5.0f);
+	~MCTSDeepPlayer() { delete root; }
 	const std::string &name() const override { return id; }
 	void reset() override;
 	Move play(const State &state) override;
-	static void think(int itermax, float c_puct, const State &state, FIRNet *net, MCTSNode *root);
+	static void think(int itermax, float c_puct, const State &state, 
+		std::shared_ptr<FIRNet> net, MCTSNode *root);
 };
 
-void train_mcts_deep(FIRNet *net, int itermax = 1024, float c_puct = 5.0f);
+void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax = 1024, float c_puct = 5.0f);

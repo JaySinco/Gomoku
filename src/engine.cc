@@ -35,7 +35,7 @@ void Board::push_valid(std::vector<Move> &set) const {
 		if (get(Move(i)) == Color::Empty)
 			set.push_back(Move(i));
 
-	std::random_shuffle(set.begin(), set.end());
+	std::shuffle(set.begin(), set.end(), global_random_engine);
 }
 
 bool Board::win_from(Move mv) const {

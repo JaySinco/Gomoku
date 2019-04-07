@@ -53,10 +53,10 @@ class FIRNet {
 	Executor *plc_predict, *val_predict, *loss_train;
 	Optimizer* optimizer;
 public:
-	FIRNet(const char *param_file = "None");
+	FIRNet(const std::string &param_file = "None");
 	~FIRNet();
 	void save_parameters(const std::string &file_name);
-	void forward(const State &state, float data[2 * BOARD_SIZE], 
+	void forward(const State &state, 
 		float value[1], std::vector<std::pair<Move, float>> &move_priors);
 	float train_step(const MiniBatch *batch);
 };

@@ -32,7 +32,7 @@ std::pair<Move, MCTSNode*> MCTSNode::select(float c_puct) const {
 	return picked;
 }
 
-Move MCTSNode::most_visted(float mcts_move_priors[BOARD_SIZE]) const {
+Move MCTSNode::most_visted() const {
 	int max_visit = -1 * std::numeric_limits<int>::max();
 	Move act(NO_MOVE_YET);
 	if (DEBUG_MCTS_MODE)
@@ -45,10 +45,17 @@ Move MCTSNode::most_visted(float mcts_move_priors[BOARD_SIZE]) const {
 			act = mn.first;
 			max_visit = vn;
 		}
-		if (mcts_move_priors != nullptr)
-			mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
 	}
 	return act;
+}
+
+Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE]) const {
+	for (const auto &mn : children) {
+		auto vn = mn.second->visits;
+		mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
+	}
+	std::discrete_distribution<int> discrete(mcts_move_priors, mcts_move_priors+BOARD_SIZE);
+	return Move(discrete(global_random_engine));
 }
 
 void MCTSNode::update(float leafValue) {
@@ -76,7 +83,7 @@ std::ostream &operator<<(std::ostream &out, const MCTSNode &node) {
 		<< node.prior << " prior, " << node.quality << " quality";
 }
 
-MCTSPurePlayer::MCTSPurePlayer(const char *name, int itermax, float c_puct)
+MCTSPurePlayer::MCTSPurePlayer(const std::string &name, int itermax, float c_puct)
 	: id(name), itermax(itermax), c_puct(c_puct) {
 	root = new MCTSNode(nullptr, 1.0f);
 }
@@ -119,15 +126,14 @@ Move MCTSPurePlayer::play(const State &state) {
 			leaf_value = 0.0f;;
 		node->update_recursive(leaf_value);
 	}
-	Move act = root->most_visted(nullptr);
+	Move act = root->most_visted();
 	swap_root(root->cut(act));
 	return act;
 }
 
-MCTSDeepPlayer::MCTSDeepPlayer(const char *name, const char *net_param_file, int itermax, float c_puct)
-	: id(name), itermax(itermax), c_puct(c_puct), net() {
+MCTSDeepPlayer::MCTSDeepPlayer(const std::string &name, std::shared_ptr<FIRNet> nn, int itermax, float c_puct)
+	: id(name), itermax(itermax), c_puct(c_puct), net(nn) {
 	root = new MCTSNode(nullptr, 1.0f);
-	net = new FIRNet(net_param_file);
 }
 
 void MCTSDeepPlayer::reset() {
@@ -135,7 +141,8 @@ void MCTSDeepPlayer::reset() {
 	root = new MCTSNode(nullptr, 1.0f);
 }
 
-void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state, FIRNet *net, MCTSNode *root) {
+void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state, 
+		std::shared_ptr<FIRNet> net, MCTSNode *root) {
 	for (int i = 0; i < itermax; ++i) {
 		State state_copied(state);
 		MCTSNode *node = root;
@@ -148,7 +155,7 @@ void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state, FIRNet
 		Color winner = state_copied.get_winner();
 		if (winner == Color::Empty) {
 			std::vector<std::pair<Move, float>> net_move_priors;
-			net->forward(state_copied, nullptr, &leaf_value, net_move_priors);
+			net->forward(state_copied, &leaf_value, net_move_priors);
 			node->expand(net_move_priors);
 			leaf_value *= -1;
 		}
@@ -169,17 +176,19 @@ Move MCTSDeepPlayer::play(const State &state) {
 	if (!(state.get_last().z() == NO_MOVE_YET) && !root->is_leaf())
 		swap_root(root->cut(state.get_last()));
 	think(itermax, c_puct, state, net, root);
-	Move act = root->most_visted(nullptr);
+	Move act = root->most_visted();
 	swap_root(root->cut(act));
 	return act;
 }
 
-void train_mcts_deep(FIRNet *net, int itermax, float c_puct) {
+void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 	LOG(INFO) << "training configuration: " << "itermax=" << itermax << ", c_puct=" << c_puct
 		<< ", batch_size=" << BATCH_SIZE << ", learning_rate=" << LEARNING_RATE;
 	long long update_cnt = 0;
+	long long game_cnt = 0;
 	DataSet dataset;
 	for (;;) {
+		++game_cnt;
 		State game;
 		MCTSNode *root = new MCTSNode(nullptr, 1.0f);
 		std::vector<SampleData> record;
@@ -190,7 +199,7 @@ void train_mcts_deep(FIRNet *net, int itermax, float c_puct) {
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(itermax, c_puct, game, net, root);
-			Move act = root->most_visted(one_step.p_label);
+			Move act = root->act_by_prob(one_step.p_label);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
@@ -216,13 +225,14 @@ void train_mcts_deep(FIRNet *net, int itermax, float c_puct) {
 			float loss = net->train_step(&batch);
 			++update_cnt;
 			if (update_cnt % 10 == 0)
-				LOG(INFO) << "loss=" << loss << ", epoch=" << update_cnt;
-			if (update_cnt % 100 == 0) {
+				LOG(INFO) << "loss=" << loss << ", dataset=" << dataset.total() << ", update="
+					<< update_cnt << ", game=" << game_cnt;
+			if (game_cnt % 50 == 0) {
 				std::ostringstream filename;
-				filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "o" << FIVE_IN_ROW
-					<< "_" << update_cnt << ".param";
+				filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
+					<< "_" << game_cnt << ".param";
 				net->save_parameters(filename.str());
 			}
-		}			
+		}	
 	}
 }

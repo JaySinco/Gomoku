@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
+#include <random>
 
 /*
 3 * 3 board looks like:
@@ -16,6 +17,8 @@ Row  => move z(5) = (x(1), y(2))
 */
 
 #define ON_BOARD(row, col) (row >= 0 && row < BOARD_MAX_ROW && col >= 0 && col < BOARD_MAX_COL)
+
+extern std::mt19937 global_random_engine;
 
 constexpr int FIVE_IN_ROW = 4;
 constexpr int BOARD_MAX_ROW = 6;
@@ -88,7 +91,7 @@ void benchmark(Player &p1, Player &p2, int round = 100, bool silent = true);
 class RandomPlayer : public Player {
 	std::string id;
 public:
-	RandomPlayer(const char *name) : id(name) {}
+	RandomPlayer(const std::string &name) : id(name) {}
 	void reset() override {}
 	const std::string &name() const override { return id; }
 	Move play(const State &state) override { return state.get_options()[0]; }
@@ -99,7 +102,7 @@ class HumanPlayer : public Player {
 	std::string id;
 	bool get_move(int &row, int &col);
 public:
-	HumanPlayer(const char *name) : id(name) {}
+	HumanPlayer(const std::string &name) : id(name) {}
 	void reset() override {}
 	const std::string &name() const override { return id; }
 	Move play(const State &state) override;
