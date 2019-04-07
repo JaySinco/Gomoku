@@ -1,8 +1,9 @@
 #include <mxnet-cpp/MxNetCpp.h>
 #include "engine.h"
 
-constexpr int BATCH_SIZE = 32;
-constexpr int BUFFER_SIZE = 1000;
+constexpr int BATCH_SIZE = 512;
+constexpr int BUFFER_SIZE = 10000;
+constexpr int EPOCH_PER_GAME = 5;
 constexpr float LEARNING_RATE = 2e-3;
 
 struct SampleData {
@@ -23,7 +24,7 @@ struct MiniBatch {
 std::ostream &operator<<(std::ostream &out, const MiniBatch &batch);
 
 class DataSet {
-public:
+private:
 	long long index;
 	SampleData *buf;
 public:

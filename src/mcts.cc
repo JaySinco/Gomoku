@@ -49,12 +49,33 @@ Move MCTSNode::most_visted() const {
 	return act;
 }
 
-Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE]) const {
+Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise) const {
+	float temp[BOARD_SIZE] = { 0.0f };
+	if (mcts_move_priors == nullptr) {
+		mcts_move_priors = temp;
+	}
+	float noise_added[BOARD_SIZE] = { 0.0f };
+	float noise_sum = 0;
+	std::normal_distribution<float> normal(0, 1);
 	for (const auto &mn : children) {
 		auto vn = mn.second->visits;
 		mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
+		noise_added[mn.first.z()] = std::abs(normal(global_random_engine));
+		noise_sum += noise_added[mn.first.z()];
 	}
-	std::discrete_distribution<int> discrete(mcts_move_priors, mcts_move_priors+BOARD_SIZE);
+	float *move_priors = mcts_move_priors;
+	float noised_move_priors[BOARD_SIZE];
+	if (add_noise) {
+		std::copy(mcts_move_priors, mcts_move_priors + BOARD_SIZE, noised_move_priors);
+		for (int i = 0; i < BOARD_SIZE; ++i)
+			noised_move_priors[i] = 0.75 * noised_move_priors[i] + 0.25 * noise_added[i] / noise_sum;
+		move_priors = noised_move_priors;
+	}
+	float check_sum = 0;
+	for (int i = 0; i < BOARD_SIZE; ++i)
+		check_sum += move_priors[i];
+	assert(check_sum > 0.98);
+	std::discrete_distribution<int> discrete(move_priors, move_priors + BOARD_SIZE);
 	return Move(discrete(global_random_engine));
 }
 
@@ -176,16 +197,20 @@ Move MCTSDeepPlayer::play(const State &state) {
 	if (!(state.get_last().z() == NO_MOVE_YET) && !root->is_leaf())
 		swap_root(root->cut(state.get_last()));
 	think(itermax, c_puct, state, net, root);
-	Move act = root->most_visted();
+	Move act = root->act_by_prob();
 	swap_root(root->cut(act));
 	return act;
 }
 
 void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
+	auto trainee = MCTSDeepPlayer("trainee", net);
+	auto opponent = MCTSPurePlayer("opponent");
 	LOG(INFO) << "training configuration: " << "itermax=" << itermax << ", c_puct=" << c_puct
-		<< ", batch_size=" << BATCH_SIZE << ", learning_rate=" << LEARNING_RATE;
+		<< ", batch_size=" << BATCH_SIZE << ", epoch_per_game=" << EPOCH_PER_GAME
+		<< ", buffer_size=" << BUFFER_SIZE << ", learning_rate=" << LEARNING_RATE;
 	long long update_cnt = 0;
 	long long game_cnt = 0;
+	float avg_turn = 0.0f;
 	DataSet dataset;
 	for (;;) {
 		++game_cnt;
@@ -193,13 +218,15 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 		MCTSNode *root = new MCTSNode(nullptr, 1.0f);
 		std::vector<SampleData> record;
 		float ind = -1.0f;
+		int turn = 0;
 		while (!game.over()) {
+			++turn;
 			ind *= -1.0f;
 			SampleData one_step;
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(itermax, c_puct, game, net, root);
-			Move act = root->act_by_prob(one_step.p_label);
+			Move act = root->act_by_prob(one_step.p_label, true);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
@@ -216,23 +243,27 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			for (auto &step : record)
 				(*step.v_label) = 0.0f;
 		}
-		for (auto &step : record) 
+		for (auto &step : record) {
 			dataset.push_with_transform(&step);
-		const int epoch_per_game = dataset.size() / BATCH_SIZE;
-		for (int epoch = 0; epoch < epoch_per_game; ++epoch) {
+		}
+		avg_turn += (turn - avg_turn) / float(game_cnt > 10 ? 10 : game_cnt);
+		for (int epoch = 0; dataset.total() > BATCH_SIZE && epoch < EPOCH_PER_GAME; ++epoch) {
 			MiniBatch batch;
 			dataset.make_mini_batch(&batch);
 			float loss = net->train_step(&batch);
 			++update_cnt;
-			if (update_cnt % 10 == 0)
-				LOG(INFO) << "loss=" << loss << ", dataset=" << dataset.total() << ", update="
-					<< update_cnt << ", game=" << game_cnt;
+			if (update_cnt % (2 * EPOCH_PER_GAME) == 0) {
+				LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
+					<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
+			}
 		}
-		if (game_cnt % 50 == 0) {
+		if (game_cnt % 100 == 0) {
 			std::ostringstream filename;
 			filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
 				<< "_" << game_cnt << ".param";
 			net->save_parameters(filename.str());
+			float lose_rate = benchmark(opponent, trainee);
+			LOG(INFO) << "benchmark against opponent, lose_rate=" << lose_rate;
 		}
 	}
 }

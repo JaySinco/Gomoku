@@ -87,7 +87,7 @@ struct Player {
 };
 
 Player &play(Player &p1, Player &p2, bool silent = true);
-void benchmark(Player &p1, Player &p2, int round = 100, bool silent = true);
+float benchmark(Player &p1, Player &p2, int round = 16, bool silent = true);
 
 class RandomPlayer : public Player {
 	std::string id;

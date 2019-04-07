@@ -139,7 +139,7 @@ Player &play(Player &p1, Player &p2, bool silent) {
 	return *winner;
 }
 
-void benchmark(Player &p1, Player &p2, int round, bool silent) {
+float benchmark(Player &p1, Player &p2, int round, bool silent) {
 	assert(round > 0);
 	int p1win = 0, p2win = 0, even = 0;
 	Player *temp = nullptr, *pblack = &p1, *pwhite = &p2;
@@ -166,8 +166,11 @@ void benchmark(Player &p1, Player &p2, int round, bool silent) {
 	float p1prob = float(p1win) / float(round);
 	float p2prob = float(p2win) / float(round);
 	float eprob = float(even) / float(round);
-	std::cout << "benchmark player win probality: " << p1.name() << "=" << p1prob << ", "
-		<< p2.name() << "=" << p2prob << ", even=" << eprob << ", sim=" << round << std::endl;
+	if (!silent) {
+		std::cout << "benchmark player win probality: " << p1.name() << "=" << p1prob << ", "
+			<< p2.name() << "=" << p2prob << ", even=" << eprob << ", sim=" << round << std::endl;
+	}
+	return p1prob;
 }
 
 bool HumanPlayer::get_move(int &row, int &col) {
