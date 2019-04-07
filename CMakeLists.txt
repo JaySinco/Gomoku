@@ -12,5 +12,7 @@ add_executable(gomoku src/main.cc src/mcts.cc src/engine.cc src/network.cc
 set_property(TARGET gomoku PROPERTY CXX_STANDARD 11)
 target_link_libraries(gomoku libmxnet.lib)
 
-# g++ -L/usr/local/lib/python3.6/site-packages/mxnet -fpermissive -Iinclude -w -std=c++11 -lmxnet -O3 src/engine.cc src/main.cc  src/mcts.cc src/network.cc -o gomoku
+# source /opt/rh/devtoolset-7/enable
+# g++ -L/usr/local/lib/python3.6/site-packages/mxnet -fpermissive -Iinclude -w -std=c++11 -lmxnet -O3 src/engine.cc src/network.cc src/mcts.cc src/main.cc -o gomoku
 # export LD_LIBRARY_PATH=/usr/local/lib/python3.6/site-packages/mxnet:$LD_LIBRARY_PATH
+

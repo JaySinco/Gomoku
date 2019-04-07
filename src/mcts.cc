@@ -227,12 +227,12 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			if (update_cnt % 10 == 0)
 				LOG(INFO) << "loss=" << loss << ", dataset=" << dataset.total() << ", update="
 					<< update_cnt << ", game=" << game_cnt;
-			if (game_cnt % 50 == 0) {
-				std::ostringstream filename;
-				filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
-					<< "_" << game_cnt << ".param";
-				net->save_parameters(filename.str());
-			}
-		}	
+		}
+		if (game_cnt % 50 == 0) {
+			std::ostringstream filename;
+			filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
+				<< "_" << game_cnt << ".param";
+			net->save_parameters(filename.str());
+		}
 	}
 }

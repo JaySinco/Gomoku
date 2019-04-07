@@ -1,10 +1,10 @@
 ﻿#pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <vector>
 #include <random>
-#include <algorithm>
 
 /*
 3 * 3 board looks like:
