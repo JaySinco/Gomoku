@@ -80,9 +80,16 @@ Color State::current() const {
 	return ~board.get(last);
 }
 
-void State::fill_feature_array(float data[2 * BOARD_SIZE]) const {
+void State::fill_feature_array(float data[4 * BOARD_SIZE]) const {
+	if (last.z() == NO_MOVE_YET) {
+		for (int r = 0; r < BOARD_MAX_ROW; ++r)
+			for (int c = 0; c < BOARD_MAX_COL; ++c)
+				data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
+		return;
+	}
 	auto own_side = current();
 	auto enemy_side = ~own_side;
+	float first = first_hand() ? 1.0f : 0.0f;
 	for (int r = 0; r < BOARD_MAX_ROW; ++r) {
 		for (int c = 0; c < BOARD_MAX_COL; ++c) {
 			auto side = board.get(Move(r, c));
@@ -90,8 +97,10 @@ void State::fill_feature_array(float data[2 * BOARD_SIZE]) const {
 				data[r * BOARD_MAX_COL + c] = 1.0f;
 			else if (side == enemy_side)
 				data[BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
+			data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = first;
 		}
 	}
+	data[2 * BOARD_SIZE  + last.r() * BOARD_MAX_COL + last.c()] = 1.0f;
 }
 
 void State::next(Move mv) {

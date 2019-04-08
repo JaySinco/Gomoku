@@ -1,13 +1,14 @@
 #include <mxnet-cpp/MxNetCpp.h>
 #include "engine.h"
 
-constexpr int BATCH_SIZE = 512;
+constexpr int BATCH_SIZE = 256;
 constexpr int BUFFER_SIZE = 10000;
-constexpr int EPOCH_PER_GAME = 5;
-constexpr float LEARNING_RATE = 2e-3;
+constexpr int EPOCH_PER_GAME = 20;
+constexpr float LEARNING_RATE = 2e-4;
+constexpr float WEIGHT_DECAY = 1e-4;
 
 struct SampleData {
-	float data[2 * BOARD_SIZE] = { 0.0f };
+	float data[4 * BOARD_SIZE] = { 0.0f };
 	float p_label[BOARD_SIZE] = { 0.0f };
 	float v_label[1] = { 0.0f };
 	
@@ -17,7 +18,7 @@ struct SampleData {
 std::ostream &operator<<(std::ostream &out, const SampleData &sample);
 
 struct MiniBatch {
-	float data[BATCH_SIZE * 2 * BOARD_SIZE] = { 0.0f };
+	float data[BATCH_SIZE * 4 * BOARD_SIZE] = { 0.0f };
 	float p_label[BATCH_SIZE * BOARD_SIZE] = { 0.0f };
 	float v_label[BATCH_SIZE * 1] = { 0.0f };
 };

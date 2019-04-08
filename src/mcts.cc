@@ -50,10 +50,7 @@ Move MCTSNode::most_visted() const {
 }
 
 Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise) const {
-	float temp[BOARD_SIZE] = { 0.0f };
-	if (mcts_move_priors == nullptr) {
-		mcts_move_priors = temp;
-	}
+	assert(mcts_move_priors != nullptr);
 	float noise_added[BOARD_SIZE] = { 0.0f };
 	float noise_sum = 0;
 	std::normal_distribution<float> normal(0, 1);
@@ -197,17 +194,19 @@ Move MCTSDeepPlayer::play(const State &state) {
 	if (!(state.get_last().z() == NO_MOVE_YET) && !root->is_leaf())
 		swap_root(root->cut(state.get_last()));
 	think(itermax, c_puct, state, net, root);
-	Move act = root->act_by_prob();
+	Move act = root->most_visted();
 	swap_root(root->cut(act));
 	return act;
 }
 
 void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
-	auto trainee = MCTSDeepPlayer("trainee", net);
-	auto opponent = MCTSPurePlayer("opponent");
+	auto trainee = MCTSDeepPlayer("trainee", net, itermax);
+	int enemy_itermax = itermax;
+	auto enemy = MCTSPurePlayer("enemy", enemy_itermax);
 	LOG(INFO) << "training configuration: " << "itermax=" << itermax << ", c_puct=" << c_puct
 		<< ", batch_size=" << BATCH_SIZE << ", epoch_per_game=" << EPOCH_PER_GAME
-		<< ", buffer_size=" << BUFFER_SIZE << ", learning_rate=" << LEARNING_RATE;
+		<< ", buffer_size=" << BUFFER_SIZE << ", weight_decay=" << WEIGHT_DECAY
+		<< ", learning_rate=" << LEARNING_RATE;
 	long long update_cnt = 0;
 	long long game_cnt = 0;
 	float avg_turn = 0.0f;
@@ -232,6 +231,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			auto temp = root->cut(act);
 			delete root; 
 			root = temp;
+			//std::cout << game << std::endl;
 		}
 		delete root;
 		if (game.get_winner() != Color::Empty) {
@@ -246,13 +246,14 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 		for (auto &step : record) {
 			dataset.push_with_transform(&step);
 		}
+		//std::cout << dataset << std::endl; 
 		avg_turn += (turn - avg_turn) / float(game_cnt > 10 ? 10 : game_cnt);
 		for (int epoch = 0; dataset.total() > BATCH_SIZE && epoch < EPOCH_PER_GAME; ++epoch) {
 			MiniBatch batch;
 			dataset.make_mini_batch(&batch);
 			float loss = net->train_step(&batch);
 			++update_cnt;
-			if (update_cnt % (2 * EPOCH_PER_GAME) == 0) {
+			if (update_cnt % (10 * EPOCH_PER_GAME) == 0) {
 				LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
 					<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
 			}
@@ -262,8 +263,14 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
 				<< "_" << game_cnt << ".param";
 			net->save_parameters(filename.str());
-			float lose_rate = benchmark(opponent, trainee);
-			LOG(INFO) << "benchmark against opponent, lose_rate=" << lose_rate;
+			constexpr int sim_game = 24;
+			float lose_prob = 1 - benchmark(trainee, enemy, sim_game);
+			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax=" 
+				<< enemy_itermax << "), lose_prob=" << lose_prob;
+			if (lose_prob < 1e-3) {
+				enemy_itermax += itermax;
+				enemy = MCTSPurePlayer("enemy", enemy_itermax);
+			}
 		}
 	}
 }

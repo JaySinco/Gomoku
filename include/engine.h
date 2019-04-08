@@ -21,9 +21,9 @@ Row  => move z(5) = (x(1), y(2))
 
 extern std::mt19937 global_random_engine;
 
-constexpr int FIVE_IN_ROW = 4;
-constexpr int BOARD_MAX_ROW = 6;
-constexpr int BOARD_MAX_COL = 6;
+constexpr int FIVE_IN_ROW = 5;
+constexpr int BOARD_MAX_ROW = 8;
+constexpr int BOARD_MAX_COL = 8;
 constexpr int BOARD_SIZE = BOARD_MAX_ROW * BOARD_MAX_COL;
 constexpr int NO_MOVE_YET = -1;
 
@@ -38,8 +38,8 @@ public:
 	Move(int row, int col) { assert(ON_BOARD(row, col)); index = row * BOARD_MAX_COL + col; }
 	Move(const Move &mv) : index(mv.z()) {}
 	int z() const { return index; }
-	int r() const { return index / BOARD_MAX_COL; }
-	int c() const { return index % BOARD_MAX_COL; }
+	int r() const { assert(index >= 0 && index < BOARD_SIZE); return index / BOARD_MAX_COL; }
+	int c() const { assert(index >= 0 && index < BOARD_SIZE); return index % BOARD_MAX_COL; }
 	bool operator<(const Move &right) const { return index < right.index; }
 	bool operator==(const Move &right) const { return index == right.index; }
 };
@@ -69,7 +69,8 @@ public:
 	Move get_last() const { return last; }
 	Color get_winner() const { return winner; }
 	Color current() const;
-	void State::fill_feature_array(float data[2 * BOARD_SIZE]) const;
+	bool first_hand() const { return current() == Color::Black; }
+	void State::fill_feature_array(float data[4 * BOARD_SIZE]) const;
 	const std::vector<Move> &get_options() const { assert(winner == Color::Empty); return opts; };
 	bool valid(Move mv) const { return std::find(opts.cbegin(), opts.cend(), mv) != opts.end(); }
 	bool over() const { return winner != Color::Empty || opts.size() == 0; }
@@ -87,7 +88,7 @@ struct Player {
 };
 
 Player &play(Player &p1, Player &p2, bool silent = true);
-float benchmark(Player &p1, Player &p2, int round = 16, bool silent = true);
+float benchmark(Player &p1, Player &p2, int round, bool silent = true);
 
 class RandomPlayer : public Player {
 	std::string id;
