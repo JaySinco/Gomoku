@@ -20,7 +20,7 @@ public:
 	MCTSNode *cut(Move occurred);
 	std::pair<Move, MCTSNode*> select(float c_puct) const;
 	Move most_visted() const;
-	Move act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise = false) const;
+	Move act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise = false, float noise_rate = 0.25) const;
 	void update(float leafValue);
 	void update_recursive(float leafValue);
 	float value(float c_puct) const;
@@ -39,6 +39,7 @@ public:
 	MCTSPurePlayer(const std::string &name, int itermax, float c_puct = 5.0f);
 	~MCTSPurePlayer() { delete root; }
 	const std::string &name() const override { return id; }
+	void reset_itermax(int n) { itermax = n; }
 	void reset() override;
 	Move play(const State &state) override;
 	

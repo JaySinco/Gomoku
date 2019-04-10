@@ -49,7 +49,7 @@ Move MCTSNode::most_visted() const {
 	return act;
 }
 
-Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise) const {
+Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate) const {
 	assert(mcts_move_priors != nullptr);
 	float noise_added[BOARD_SIZE] = { 0.0f };
 	float noise_sum = 0;
@@ -65,7 +65,7 @@ Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise) c
 	if (add_noise) {
 		std::copy(mcts_move_priors, mcts_move_priors + BOARD_SIZE, noised_move_priors);
 		for (int i = 0; i < BOARD_SIZE; ++i)
-			noised_move_priors[i] = 0.75 * noised_move_priors[i] + 0.25 * noise_added[i] / noise_sum;
+			noised_move_priors[i] = (1- noise_rate) * noised_move_priors[i] + noise_rate * noise_added[i] / noise_sum;
 		move_priors = noised_move_priors;
 	}
 	float check_sum = 0;
@@ -225,7 +225,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(itermax, c_puct, game, net, root);
-			Move act = root->act_by_prob(one_step.p_label, true);
+			Move act = root->act_by_prob(one_step.p_label, true, 0.5);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
@@ -269,7 +269,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 				<< enemy_itermax << "), lose_prob=" << lose_prob;
 			if (lose_prob < 1e-3) {
 				enemy_itermax += itermax;
-				enemy = MCTSPurePlayer("enemy", enemy_itermax);
+				enemy.reset_itermax(enemy_itermax);
 			}
 		}
 	}
