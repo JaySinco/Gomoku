@@ -1,5 +1,7 @@
 #include "mcts.h"
 
+#define GSL_SQRT_DBL_MIN   1.4916681462400413e-154
+
 MCTSNode::~MCTSNode() {
 	for (const auto &mn : children) 
 		delete mn.second;
@@ -49,29 +51,112 @@ Move MCTSNode::most_visted() const {
 	return act;
 }
 
+double gsl_ran_gamma(const double a, const double b) {
+	std::uniform_real_distribution<double> uniform(0, 1);
+	std::normal_distribution<double> normal(0, 1);
+	/* assume a > 0 */
+	if (a < 1) {
+		double u = uniform(global_random_engine);
+		return gsl_ran_gamma(1.0 + a, b) * pow(u, 1.0 / a);
+	}
+	double x, v, u;
+	double d = a - 1.0 / 3.0;
+	double c = (1.0 / 3.0) / sqrt(d);
+
+	while (true) {
+		do {
+			x = normal(global_random_engine);
+			v = 1.0 + c * x;
+		} while (v <= 0);
+
+		v = v * v * v;
+		u = uniform(global_random_engine);
+
+		if (u < 1 - 0.0331 * x * x * x * x)
+			break;
+
+		if (log(u) < 0.5 * x * x + d * (1 - v + log(v)))
+			break;
+	}
+	return b * d * v;
+}
+
+void ran_dirichlet_small(const size_t K, const double alpha[], double theta[]) {
+	std::uniform_real_distribution<double> uniform(0, 1);
+	size_t i;
+	double norm = 0.0, umax = 0;
+
+	for (i = 0; i < K; i++) {
+		double u = log(uniform(global_random_engine)) / alpha[i];
+
+		theta[i] = u;
+
+		if (u > umax || i == 0) {
+			umax = u;
+		}
+	}
+	for (i = 0; i < K; i++) {
+		theta[i] = exp(theta[i] - umax);
+	}
+	for (i = 0; i < K; i++) {
+		theta[i] = theta[i] * gsl_ran_gamma(alpha[i] + 1.0, 1.0);
+	}
+	for (i = 0; i < K; i++) {
+		norm += theta[i];
+	}
+	for (i = 0; i < K; i++) {
+		theta[i] /= norm;
+	}
+}
+
+void gsl_ran_dirichlet(const size_t K, const double alpha[], double theta[]) {
+	size_t i;
+	double norm = 0.0;
+	for (i = 0; i < K; i++) {
+		theta[i] = gsl_ran_gamma(alpha[i], 1.0);
+	}
+	for (i = 0; i < K; i++) {
+		norm += theta[i];
+	}
+	if (norm < GSL_SQRT_DBL_MIN)  /* Handle underflow */ {
+		ran_dirichlet_small(K, alpha, theta);
+		return;
+	}
+	for (i = 0; i < K; i++) {
+		theta[i] /= norm;
+	}
+}
+
 Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate) const {
 	assert(mcts_move_priors != nullptr);
+	const size_t child_n = children.size();
+	auto noise_theta = new double[child_n];
+	auto noise_alpha = new double[child_n];
+	for (int i = 0; i < child_n; ++i)
+		noise_alpha[i] = 0.3;
+	gsl_ran_dirichlet(child_n, noise_alpha, noise_theta);
 	float noise_added[BOARD_SIZE] = { 0.0f };
-	float noise_sum = 0;
-	std::normal_distribution<float> normal(0, 1);
+	int child_cnt = 0;
 	for (const auto &mn : children) {
 		auto vn = mn.second->visits;
 		mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
-		noise_added[mn.first.z()] = std::abs(normal(global_random_engine));
-		noise_sum += noise_added[mn.first.z()];
+		noise_added[mn.first.z()] = noise_theta[child_cnt];
+		++child_cnt;
 	}
+	delete [] noise_theta;
+	delete [] noise_alpha;
 	float *move_priors = mcts_move_priors;
 	float noised_move_priors[BOARD_SIZE];
 	if (add_noise) {
 		std::copy(mcts_move_priors, mcts_move_priors + BOARD_SIZE, noised_move_priors);
 		for (int i = 0; i < BOARD_SIZE; ++i)
-			noised_move_priors[i] = (1- noise_rate) * noised_move_priors[i] + noise_rate * noise_added[i] / noise_sum;
+			noised_move_priors[i] = (1 - noise_rate) * noised_move_priors[i] + noise_rate * noise_added[i];
 		move_priors = noised_move_priors;
 	}
 	float check_sum = 0;
 	for (int i = 0; i < BOARD_SIZE; ++i)
 		check_sum += move_priors[i];
-	assert(check_sum > 0.98);
+	assert(check_sum > 0.99);
 	std::discrete_distribution<int> discrete(move_priors, move_priors + BOARD_SIZE);
 	return Move(discrete(global_random_engine));
 }
@@ -225,7 +310,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(itermax, c_puct, game, net, root);
-			Move act = root->act_by_prob(one_step.p_label, true, 0.5);
+			Move act = root->act_by_prob(one_step.p_label, true, 0.25);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);

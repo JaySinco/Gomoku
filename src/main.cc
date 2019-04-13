@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "engine.h"
+#include "game.h"
 #include "mcts.h"
 
 std::random_device global_random_device;
@@ -15,10 +15,10 @@ int main() {
 	//auto p1 = RandomPlayer("p1");
 	//auto p2 = HumanPlayer("jaysinco");
 	//auto p3 = MCTSPurePlayer("mcts_pure", 3000);
-	//auto p4 = MCTSDeepPlayer("mcts_deep1", net1, 4000);
-	//auto p5 = MCTSDeepPlayer("mcts_deep2", net1, 2000);
+	//auto p4 = MCTSDeepPlayer("mcts_deep1", net, 400);
+	//auto p5 = MCTSDeepPlayer("mcts_deep2", net, 400);
 	//auto p6 = MCTSDeepPlayer("mcts_deep2", net2, 4000);
-	//play(p4, p2, false);
+	//play(p2, p4, false);
 	//benchmark(p4, p5, 10, false);
 	train_mcts_deep(net);
 }

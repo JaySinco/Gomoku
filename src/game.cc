@@ -3,7 +3,8 @@
 #include <string>
 #include <sstream>
 #include <map>
-#include "engine.h"
+
+#include "game.h"
 
 Color operator~(const Color c) {
 	Color opposite;

@@ -4,7 +4,8 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
-#include <random>
+
+#include "vars.h"
 
 /*
 3 * 3 board looks like:
@@ -18,14 +19,6 @@ Row  => move z(5) = (x(1), y(2))
 */
 
 #define ON_BOARD(row, col) (row >= 0 && row < BOARD_MAX_ROW && col >= 0 && col < BOARD_MAX_COL)
-
-extern std::mt19937 global_random_engine;
-
-constexpr int FIVE_IN_ROW = 5;
-constexpr int BOARD_MAX_ROW = 8;
-constexpr int BOARD_MAX_COL = 8;
-constexpr int BOARD_SIZE = BOARD_MAX_ROW * BOARD_MAX_COL;
-constexpr int NO_MOVE_YET = -1;
 
 enum class Color {Empty, Black, White};
 Color operator~(const Color c);

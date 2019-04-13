@@ -1,11 +1,6 @@
 #include <mxnet-cpp/MxNetCpp.h>
-#include "engine.h"
 
-constexpr int BATCH_SIZE = 256;
-constexpr int BUFFER_SIZE = 10000;
-constexpr int EPOCH_PER_GAME = 20;
-constexpr float LEARNING_RATE = 2e-4;
-constexpr float WEIGHT_DECAY = 1e-4;
+#include "game.h"
 
 struct SampleData {
 	float data[4 * BOARD_SIZE] = { 0.0f };

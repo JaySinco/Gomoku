@@ -1,10 +1,9 @@
 #pragma once
 
 #include <map>
-#include "engine.h"
-#include "network.h"
 
-constexpr bool DEBUG_MCTS_MODE = false;
+#include "game.h"
+#include "network.h"
 
 class MCTSNode {
 	friend std::ostream &operator<<(std::ostream &out, const MCTSNode &node);
