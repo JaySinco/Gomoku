@@ -20,8 +20,8 @@ Color operator~(const Color c) {
 std::ostream &operator<<(std::ostream &out, Color c) {
 	switch (c) {
 	case Color::Empty: out << "  "; break;
-	case Color::Black: out << "¡ñ"; break;
-	case Color::White: out << "¡ð"; break;
+	case Color::Black: out << "â—"; break;
+	case Color::White: out << "â—‹"; break;
 	}
 	return out;
 }

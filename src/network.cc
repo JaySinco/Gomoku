@@ -44,9 +44,9 @@ std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
 	for (int row = 0; row < BOARD_MAX_ROW; ++row) {
 		for (int col = 0; col < BOARD_MAX_COL; ++col) {
 			if (sample.data[row * BOARD_MAX_COL + col] > 0)
-				out << "¡ñ";
+				out << "â—";
 			else if (sample.data[BOARD_SIZE + row * BOARD_MAX_COL + col] > 0)
-				out << "¡ð";
+				out << "â—‹";
 			else
 				out << "  ";
 			if (sample.data[2 * BOARD_SIZE + row * BOARD_MAX_COL + col] > 0) {
@@ -58,16 +58,16 @@ std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
 			else
 				assert(first == sample.data[3 * BOARD_SIZE + row * BOARD_MAX_COL + col]);
 		}
-		out << "£ü";
+		out << "ï½œ";
 		for (int col = 0; col < BOARD_MAX_COL; ++col)
 			out << " " << std::setw(5) << std::fixed << std::setprecision(1)
 				<< sample.p_label[row * BOARD_MAX_COL + col] * 100 << "%,";
 		out << std::endl;
 	}
-	out << "¡üvalue=" << sample.v_label[0] << ", last_move=";
-	if (last.z() == NO_MOVE_YET) 
+	out << "â†‘value=" << sample.v_label[0] << ", last_move=";
+	if (last.z() == NO_MOVE_YET)
 		out << "None";
-	else 
+	else
 		out << last;
 	out << ", fist_hand=" << first << std::endl;
 	return out;
@@ -222,7 +222,7 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	optimizer = OptimizerRegistry::Find("sgd");
 	optimizer->SetParam("momentum", 0.9)
 		->SetParam("lr", LEARNING_RATE)
-		->SetParam("wd", WEIGHT_DECAY); 
+		->SetParam("wd", WEIGHT_DECAY);
 	MX_CATCH
 }
 
@@ -240,7 +240,7 @@ void FIRNet::save_parameters(const std::string &file_name) {
 	MX_CATCH
 }
 
-void FIRNet::forward(const State &state, 
+void FIRNet::forward(const State &state,
 		float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
 	MX_TRY
 	float data[4 * BOARD_SIZE] = { 0.0f };
@@ -265,7 +265,7 @@ float FIRNet::train_step(const MiniBatch *batch) {
 	loss_train->Forward(true);
 	loss_train->Backward();
 	for (int i = 0; i < loss_arg_names.size(); ++i) {
-		if (loss_arg_names[i] == "data" || loss_arg_names[i] == "plc_label" || 
+		if (loss_arg_names[i] == "data" || loss_arg_names[i] == "plc_label" ||
 			loss_arg_names[i] == "val_label")
 			continue;
 		optimizer->Update(i, loss_train->arg_arrays[i], loss_train->grad_arrays[i]);

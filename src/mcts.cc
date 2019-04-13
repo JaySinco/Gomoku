@@ -3,7 +3,7 @@
 #define GSL_SQRT_DBL_MIN   1.4916681462400413e-154
 
 MCTSNode::~MCTSNode() {
-	for (const auto &mn : children) 
+	for (const auto &mn : children)
 		delete mn.second;
 }
 
@@ -244,7 +244,7 @@ void MCTSDeepPlayer::reset() {
 	root = new MCTSNode(nullptr, 1.0f);
 }
 
-void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state, 
+void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state,
 		std::shared_ptr<FIRNet> net, MCTSNode *root) {
 	for (int i = 0; i < itermax; ++i) {
 		State state_copied(state);
@@ -314,16 +314,16 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
-			delete root; 
+			delete root;
 			root = temp;
 			//std::cout << game << std::endl;
 		}
 		delete root;
 		if (game.get_winner() != Color::Empty) {
-			if (ind < 0) 
-				for (auto &step : record) 
-					(*step.v_label) *= -1;	
-		} 
+			if (ind < 0)
+				for (auto &step : record)
+					(*step.v_label) *= -1;
+		}
 		else {
 			for (auto &step : record)
 				(*step.v_label) = 0.0f;
@@ -331,7 +331,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 		for (auto &step : record) {
 			dataset.push_with_transform(&step);
 		}
-		//std::cout << dataset << std::endl; 
+		//std::cout << dataset << std::endl;
 		avg_turn += (turn - avg_turn) / float(game_cnt > 10 ? 10 : game_cnt);
 		for (int epoch = 0; dataset.total() > BATCH_SIZE && epoch < EPOCH_PER_GAME; ++epoch) {
 			MiniBatch batch;
@@ -350,7 +350,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			net->save_parameters(filename.str());
 			constexpr int sim_game = 24;
 			float lose_prob = 1 - benchmark(trainee, enemy, sim_game);
-			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax=" 
+			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
 				<< enemy_itermax << "), lose_prob=" << lose_prob;
 			if (lose_prob < 1e-3) {
 				enemy_itermax += itermax;

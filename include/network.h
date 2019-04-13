@@ -6,7 +6,7 @@ struct SampleData {
 	float data[4 * BOARD_SIZE] = { 0.0f };
 	float p_label[BOARD_SIZE] = { 0.0f };
 	float v_label[1] = { 0.0f };
-	
+
 	void flip_verticing();
 	void transpose();
 };
@@ -53,7 +53,7 @@ public:
 	FIRNet(const std::string &param_file = "None");
 	~FIRNet();
 	void save_parameters(const std::string &file_name);
-	void forward(const State &state, 
+	void forward(const State &state,
 		float value[1], std::vector<std::pair<Move, float>> &move_priors);
 	float train_step(const MiniBatch *batch);
 };

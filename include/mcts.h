@@ -41,7 +41,7 @@ public:
 	void reset_itermax(int n) { itermax = n; }
 	void reset() override;
 	Move play(const State &state) override;
-	
+
 };
 
 class MCTSDeepPlayer : public Player {
@@ -57,7 +57,7 @@ public:
 	const std::string &name() const override { return id; }
 	void reset() override;
 	Move play(const State &state) override;
-	static void think(int itermax, float c_puct, const State &state, 
+	static void think(int itermax, float c_puct, const State &state,
 		std::shared_ptr<FIRNet> net, MCTSNode *root);
 };
 
