@@ -207,9 +207,10 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	args_map["val_label"] = val_label;
 	if (param_file == "None") {
 		loss.InferArgsMap(ctx, &args_map, args_map);
-		Xavier xavier = Xavier(Xavier::gaussian, Xavier::in, 2);
+		auto initializer = Xavier(Xavier::gaussian, Xavier::in, 2.34);
+		//auto initializer = Uniform(0.01);
 		for (auto &arg : args_map) {
-			xavier(arg.first, &arg.second);
+			initializer(arg.first, &arg.second);
 		}
 	}
 	loss_train = loss.SimpleBind(ctx, args_map);
@@ -227,10 +228,13 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 }
 
 FIRNet::~FIRNet() {
+	MX_TRY
 	delete plc_predict;
 	delete val_predict;
 	delete loss_train;
 	delete optimizer;
+	MXNotifyShutdown();
+	MX_CATCH
 }
 
 void FIRNet::save_parameters(const std::string &file_name) {

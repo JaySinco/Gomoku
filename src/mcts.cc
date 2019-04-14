@@ -1,7 +1,5 @@
 #include "mcts.h"
 
-#define GSL_SQRT_DBL_MIN   1.4916681462400413e-154
-
 MCTSNode::~MCTSNode() {
 	for (const auto &mn : children)
 		delete mn.second;
@@ -51,78 +49,14 @@ Move MCTSNode::most_visted() const {
 	return act;
 }
 
-double gsl_ran_gamma(const double a, const double b) {
-	std::uniform_real_distribution<double> uniform(0, 1);
-	std::normal_distribution<double> normal(0, 1);
-	/* assume a > 0 */
-	if (a < 1) {
-		double u = uniform(global_random_engine);
-		return gsl_ran_gamma(1.0 + a, b) * pow(u, 1.0 / a);
-	}
-	double x, v, u;
-	double d = a - 1.0 / 3.0;
-	double c = (1.0 / 3.0) / sqrt(d);
-
-	while (true) {
-		do {
-			x = normal(global_random_engine);
-			v = 1.0 + c * x;
-		} while (v <= 0);
-
-		v = v * v * v;
-		u = uniform(global_random_engine);
-
-		if (u < 1 - 0.0331 * x * x * x * x)
-			break;
-
-		if (log(u) < 0.5 * x * x + d * (1 - v + log(v)))
-			break;
-	}
-	return b * d * v;
-}
-
-void ran_dirichlet_small(const size_t K, const double alpha[], double theta[]) {
-	std::uniform_real_distribution<double> uniform(0, 1);
-	size_t i;
-	double norm = 0.0, umax = 0;
-
-	for (i = 0; i < K; i++) {
-		double u = log(uniform(global_random_engine)) / alpha[i];
-
-		theta[i] = u;
-
-		if (u > umax || i == 0) {
-			umax = u;
-		}
-	}
-	for (i = 0; i < K; i++) {
-		theta[i] = exp(theta[i] - umax);
-	}
-	for (i = 0; i < K; i++) {
-		theta[i] = theta[i] * gsl_ran_gamma(alpha[i] + 1.0, 1.0);
-	}
-	for (i = 0; i < K; i++) {
+void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
+	std::gamma_distribution<float> gamma(alpha, 1.0f);
+	float norm = 0.0;
+	for (size_t i = 0; i < K; i++) {
+		theta[i] = gamma(global_random_engine);
 		norm += theta[i];
 	}
-	for (i = 0; i < K; i++) {
-		theta[i] /= norm;
-	}
-}
-
-void gsl_ran_dirichlet(const size_t K, const double alpha[], double theta[]) {
-	size_t i;
-	double norm = 0.0;
-	for (i = 0; i < K; i++) {
-		theta[i] = gsl_ran_gamma(alpha[i], 1.0);
-	}
-	for (i = 0; i < K; i++) {
-		norm += theta[i];
-	}
-	if (norm < GSL_SQRT_DBL_MIN)  /* Handle underflow */ {
-		ran_dirichlet_small(K, alpha, theta);
-		return;
-	}
-	for (i = 0; i < K; i++) {
+	for (size_t i = 0; i < K; i++) {
 		theta[i] /= norm;
 	}
 }
@@ -130,11 +64,8 @@ void gsl_ran_dirichlet(const size_t K, const double alpha[], double theta[]) {
 Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate) const {
 	assert(mcts_move_priors != nullptr);
 	const size_t child_n = children.size();
-	auto noise_theta = new double[child_n];
-	auto noise_alpha = new double[child_n];
-	for (int i = 0; i < child_n; ++i)
-		noise_alpha[i] = 0.3;
-	gsl_ran_dirichlet(child_n, noise_alpha, noise_theta);
+	auto noise_theta = new float[child_n];
+	gen_ran_dirichlet(child_n, 0.3f, noise_theta);
 	float noise_added[BOARD_SIZE] = { 0.0f };
 	int child_cnt = 0;
 	for (const auto &mn : children) {
@@ -144,7 +75,6 @@ Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, f
 		++child_cnt;
 	}
 	delete [] noise_theta;
-	delete [] noise_alpha;
 	float *move_priors = mcts_move_priors;
 	float noised_move_priors[BOARD_SIZE];
 	if (add_noise) {
@@ -154,8 +84,10 @@ Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, f
 		move_priors = noised_move_priors;
 	}
 	float check_sum = 0;
-	for (int i = 0; i < BOARD_SIZE; ++i)
+	for (int i = 0; i < BOARD_SIZE; ++i) {
+		//std::cout << mcts_move_priors[i] << " + " << noise_added[i] << " -> "<< move_priors[i] << std::endl;
 		check_sum += move_priors[i];
+	}
 	assert(check_sum > 0.99);
 	std::discrete_distribution<int> discrete(move_priors, move_priors + BOARD_SIZE);
 	return Move(discrete(global_random_engine));
@@ -286,7 +218,7 @@ Move MCTSDeepPlayer::play(const State &state) {
 
 void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 	auto trainee = MCTSDeepPlayer("trainee", net, itermax);
-	int enemy_itermax = itermax;
+	int enemy_itermax = 1000;
 	auto enemy = MCTSPurePlayer("enemy", enemy_itermax);
 	LOG(INFO) << "training configuration: " << "itermax=" << itermax << ", c_puct=" << c_puct
 		<< ", batch_size=" << BATCH_SIZE << ", epoch_per_game=" << EPOCH_PER_GAME
@@ -297,7 +229,6 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 	float avg_turn = 0.0f;
 	DataSet dataset;
 	for (;;) {
-		++game_cnt;
 		State game;
 		MCTSNode *root = new MCTSNode(nullptr, 1.0f);
 		std::vector<SampleData> record;
@@ -332,22 +263,27 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			dataset.push_with_transform(&step);
 		}
 		//std::cout << dataset << std::endl;
-		avg_turn += (turn - avg_turn) / float(game_cnt > 10 ? 10 : game_cnt);
-		for (int epoch = 0; dataset.total() > BATCH_SIZE && epoch < EPOCH_PER_GAME; ++epoch) {
+		if (dataset.total() > BATCH_SIZE) {
+			++game_cnt;
+			avg_turn += (turn - avg_turn) / float(game_cnt > 5 ? 5 : game_cnt);
 			MiniBatch batch;
 			dataset.make_mini_batch(&batch);
-			float loss = net->train_step(&batch);
-			++update_cnt;
-			if (update_cnt % (10 * EPOCH_PER_GAME) == 0) {
-				LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
-					<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
+			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
+				float loss = net->train_step(&batch);
+				++update_cnt;
+				if (update_cnt % (2 * EPOCH_PER_GAME) == 0) {
+					LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
+						<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
+				}
 			}
 		}
-		if (game_cnt % 100 == 0) {
+		if (game_cnt > 0 && game_cnt % 50 == 0) {
 			std::ostringstream filename;
 			filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
 				<< "_" << game_cnt << ".param";
 			net->save_parameters(filename.str());
+		}
+		if (game_cnt > 0 && game_cnt % 30 == 0) {
 			constexpr int sim_game = 24;
 			float lose_prob = 1 - benchmark(trainee, enemy, sim_game);
 			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="

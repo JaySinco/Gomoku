@@ -8,10 +8,10 @@ constexpr int NO_MOVE_YET = -1;
 
 constexpr bool DEBUG_MCTS_MODE = false;
 
-constexpr int BATCH_SIZE = 256;
-constexpr int BUFFER_SIZE = 10240;
-constexpr int EPOCH_PER_GAME = 40;
-constexpr float LEARNING_RATE = 2e-4;
+constexpr int BATCH_SIZE = 512;
+constexpr int BUFFER_SIZE = 10000;
+constexpr int EPOCH_PER_GAME = 5;
+constexpr float LEARNING_RATE = 2e-3;
 constexpr float WEIGHT_DECAY = 1e-4;
 
 extern std::mt19937 global_random_engine;
