@@ -1,4 +1,4 @@
-#include "mcts.h"
+	#include "mcts.h"
 
 MCTSNode::~MCTSNode() {
 	for (const auto &mn : children)
@@ -35,10 +35,10 @@ std::pair<Move, MCTSNode*> MCTSNode::select(float c_puct) const {
 Move MCTSNode::most_visted() const {
 	int max_visit = -1 * std::numeric_limits<int>::max();
 	Move act(NO_MOVE_YET);
-	if (DEBUG_MCTS_MODE)
+	if (DEBUG_MCTS_PROB)
 		std::cout << "(ROOT): " << *this << std::endl;
 	for (const auto &mn : children) {
-		if (DEBUG_MCTS_MODE)
+		if (DEBUG_MCTS_PROB)
 			std::cout << mn.first << ": " << *mn.second << std::endl;
 		auto vn = mn.second->visits;
 		if (vn > max_visit) {
@@ -62,19 +62,38 @@ void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
 }
 
 Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate) const {
-	assert(mcts_move_priors != nullptr);
+	float move_priors_buffer[BOARD_SIZE] = { 0.0f };
+	if (mcts_move_priors == nullptr)
+		mcts_move_priors = move_priors_buffer;
 	const size_t child_n = children.size();
 	auto noise_theta = new float[child_n];
 	gen_ran_dirichlet(child_n, 0.3f, noise_theta);
 	float noise_added[BOARD_SIZE] = { 0.0f };
 	int child_cnt = 0;
+	std::map<int, float> move_priors_map;
+	if (DEBUG_MCTS_PROB)
+		std::cout << "(ROOT): " << *this << std::endl;
+	float alpha = -1 * std::numeric_limits<float>::max();
 	for (const auto &mn : children) {
+		if (DEBUG_MCTS_PROB)
+			std::cout << mn.first << ": " << *mn.second << std::endl;
 		auto vn = mn.second->visits;
-		mcts_move_priors[mn.first.z()] = float(vn) / float(visits);
+		move_priors_map[mn.first.z()] = 1.0f / TEMPERATURE_RATE * std::log(float(vn) + 1e-10);
+		if (move_priors_map[mn.first.z()] > alpha)
+			alpha = move_priors_map[mn.first.z()];
 		noise_added[mn.first.z()] = noise_theta[child_cnt];
 		++child_cnt;
 	}
 	delete [] noise_theta;
+	float denominator = 0;
+	for (auto &mn : move_priors_map) {
+		float value = std::exp(mn.second - alpha);
+		move_priors_map[mn.first] = value;
+		denominator += value;
+	}
+	for (auto &mn : move_priors_map) {
+		mcts_move_priors[mn.first] = mn.second / denominator;
+	}
 	float *move_priors = mcts_move_priors;
 	float noised_move_priors[BOARD_SIZE];
 	if (add_noise) {
@@ -201,7 +220,7 @@ void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state,
 			else if (winner == ~enemy_side)
 				leaf_value = 1.0f;
 			else
-				leaf_value = 0.0f;;
+				leaf_value = 0.0f;
 		}
 		node->update_recursive(leaf_value);
 	}
@@ -211,7 +230,7 @@ Move MCTSDeepPlayer::play(const State &state) {
 	if (!(state.get_last().z() == NO_MOVE_YET) && !root->is_leaf())
 		swap_root(root->cut(state.get_last()));
 	think(itermax, c_puct, state, net, root);
-	Move act = root->most_visted();
+	Move act = root->act_by_prob(nullptr);
 	swap_root(root->cut(act));
 	return act;
 }
@@ -247,7 +266,8 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			auto temp = root->cut(act);
 			delete root;
 			root = temp;
-			//std::cout << game << std::endl;
+			if (DEBUG_TRAIN_DATA)
+				std::cout << game << std::endl;
 		}
 		delete root;
 		if (game.get_winner() != Color::Empty) {
@@ -262,7 +282,8 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 		for (auto &step : record) {
 			dataset.push_with_transform(&step);
 		}
-		//std::cout << dataset << std::endl;
+		if (DEBUG_TRAIN_DATA)
+			std::cout << dataset << std::endl;
 		if (dataset.total() > BATCH_SIZE) {
 			++game_cnt;
 			avg_turn += (turn - avg_turn) / float(game_cnt > 5 ? 5 : game_cnt);
@@ -271,7 +292,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
 				float loss = net->train_step(&batch);
 				++update_cnt;
-				if (update_cnt % (2 * EPOCH_PER_GAME) == 0) {
+				if (update_cnt % (5 * EPOCH_PER_GAME) == 0) {
 					LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
 						<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
 				}
@@ -289,7 +310,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
 				<< enemy_itermax << "), lose_prob=" << lose_prob;
 			if (lose_prob < 1e-3) {
-				enemy_itermax += itermax;
+				enemy_itermax += 1000;
 				enemy.reset_itermax(enemy_itermax);
 			}
 		}
