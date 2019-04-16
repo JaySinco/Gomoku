@@ -3,7 +3,7 @@
 #include "game.h"
 
 struct SampleData {
-	float data[4 * BOARD_SIZE] = { 0.0f };
+	float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
 	float p_label[BOARD_SIZE] = { 0.0f };
 	float v_label[1] = { 0.0f };
 
@@ -13,7 +13,7 @@ struct SampleData {
 std::ostream &operator<<(std::ostream &out, const SampleData &sample);
 
 struct MiniBatch {
-	float data[BATCH_SIZE * 4 * BOARD_SIZE] = { 0.0f };
+	float data[BATCH_SIZE * INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
 	float p_label[BATCH_SIZE * BOARD_SIZE] = { 0.0f };
 	float v_label[BATCH_SIZE * 1] = { 0.0f };
 };

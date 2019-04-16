@@ -18,7 +18,8 @@ void SampleData::flip_verticing() {
 			int b = row * BOARD_MAX_COL + BOARD_MAX_COL - col - 1;
 			std::iter_swap(data + a, data + b);
 			std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
-			std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
+			if (INPUT_FEATURE_NUM > 2)
+				std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
 			std::iter_swap(p_label + a, p_label + b);
 		}
 	}
@@ -32,7 +33,8 @@ void SampleData::transpose() {
 			int b = col * BOARD_MAX_COL + row;
 			std::iter_swap(data + a, data + b);
 			std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
-			std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
+			if (INPUT_FEATURE_NUM > 2)
+				std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
 			std::iter_swap(p_label + a, p_label + b);
 		}
 	}
@@ -49,14 +51,18 @@ std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
 				out << "○";
 			else
 				out << "  ";
-			if (sample.data[2 * BOARD_SIZE + row * BOARD_MAX_COL + col] > 0) {
-				assert(last.z() == NO_MOVE_YET);
-				last = Move(row, col);
+			if (INPUT_FEATURE_NUM > 2) {
+				if (sample.data[2 * BOARD_SIZE + row * BOARD_MAX_COL + col] > 0) {
+					assert(last.z() == NO_MOVE_YET);
+					last = Move(row, col);
+				}
 			}
-			if (first < 0)
-				first = sample.data[3 * BOARD_SIZE + row * BOARD_MAX_COL + col];
-			else
-				assert(first == sample.data[3 * BOARD_SIZE + row * BOARD_MAX_COL + col]);
+			if (INPUT_FEATURE_NUM > 3) {
+				if (first < 0)
+					first = sample.data[3 * BOARD_SIZE + row * BOARD_MAX_COL + col];
+				else
+					assert(first == sample.data[3 * BOARD_SIZE + row * BOARD_MAX_COL + col]);
+			}
 		}
 		out << "｜";
 		for (int col = 0; col < BOARD_MAX_COL; ++col)
@@ -64,19 +70,25 @@ std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
 				<< sample.p_label[row * BOARD_MAX_COL + col] * 100 << "%,";
 		out << std::endl;
 	}
-	out << "↑value=" << sample.v_label[0] << ", last_move=";
-	if (last.z() == NO_MOVE_YET)
-		out << "None";
-	else
-		out << last;
-	out << ", fist_hand=" << first << std::endl;
+	out << "↑value=" << sample.v_label[0];
+	if (INPUT_FEATURE_NUM > 2) {
+		out << ", last_move=";
+		if (last.z() == NO_MOVE_YET)
+			out << "None";
+		else
+			out << last;
+	}
+	if (INPUT_FEATURE_NUM > 3)
+		out << ", fist_hand=" << first;
+	out << std::endl;
 	return out;
 }
 
 std::ostream &operator<<(std::ostream &out, const MiniBatch &batch) {
 	for (int i = 0; i < BATCH_SIZE; ++i) {
 		SampleData item;
-		std::copy(batch.data + i * 4 * BOARD_SIZE, batch.data + (i + 1) * 4 * BOARD_SIZE, item.data);
+		std::copy(batch.data + i * INPUT_FEATURE_NUM * BOARD_SIZE,
+			batch.data + (i + 1) * INPUT_FEATURE_NUM * BOARD_SIZE, item.data);
 		std::copy(batch.p_label + i * BOARD_SIZE, batch.p_label + (i + 1) * BOARD_SIZE, item.p_label);
 		std::copy(batch.v_label + i, batch.v_label + (i + 1), item.v_label);
 		out << item << std::endl;
@@ -99,7 +111,7 @@ void DataSet::make_mini_batch(MiniBatch *batch) const {
 	for (int i = 0; i < BATCH_SIZE; i++) {
 		int c = uniform(global_random_engine);
 		SampleData *r = buf + c;
-		std::copy(std::begin(r->data), std::end(r->data), batch->data + 4 * BOARD_SIZE * i);
+		std::copy(std::begin(r->data), std::end(r->data), batch->data + INPUT_FEATURE_NUM * BOARD_SIZE * i);
 		std::copy(std::begin(r->p_label), std::end(r->p_label), batch->p_label + BOARD_SIZE * i);
 		std::copy(std::begin(r->v_label), std::end(r->v_label), batch->v_label + i);
 	}
@@ -168,7 +180,7 @@ Symbol middle_layer(Symbol data) {
 
 std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 	Symbol plc_conv = convolution_layer("plc_conv", data,
-		4, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
+		INPUT_FEATURE_NUM, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
 	Symbol plc_logist_out = dense_layer("plc_logist_out", plc_conv, BOARD_SIZE, "None");
 	Symbol plc_out = softmax("plc_out", plc_logist_out);
 	Symbol plc_m_loss = -1 * elemwise_mul(label, log_softmax(plc_logist_out));
@@ -178,7 +190,7 @@ std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 
 std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 	Symbol val_conv = convolution_layer("val_conv", data,
-		2, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
+		INPUT_FEATURE_NUM, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
 	Symbol val_dense = dense_layer("val_dense", val_conv, 64, "relu");
 	Symbol val_out = dense_layer("val_logist_out", val_dense, 1, "tanh");
 	Symbol val_loss = MakeLoss(mean(square(elemwise_sub(val_out, label))));
@@ -186,8 +198,8 @@ std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 }
 
 FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
-		data_predict(NDArray(Shape(1, 4, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
-		data_train(NDArray(Shape(BATCH_SIZE, 4, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
+		data_predict(NDArray(Shape(1, INPUT_FEATURE_NUM, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
+		data_train(NDArray(Shape(BATCH_SIZE, INPUT_FEATURE_NUM, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		plc_label(NDArray(Shape(BATCH_SIZE, BOARD_SIZE), ctx)),
 		val_label(NDArray(Shape(BATCH_SIZE, 1), ctx)) {
 	MX_TRY
@@ -247,9 +259,9 @@ void FIRNet::save_parameters(const std::string &file_name) {
 void FIRNet::forward(const State &state,
 		float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
 	MX_TRY
-	float data[4 * BOARD_SIZE] = { 0.0f };
+	float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
 	state.fill_feature_array(data);
-	data_predict.SyncCopyFromCPU(data, 4 * BOARD_SIZE);
+	data_predict.SyncCopyFromCPU(data, INPUT_FEATURE_NUM * BOARD_SIZE);
 	plc_predict->Forward(false);
 	val_predict->Forward(false);
 	NDArray::WaitAll();
@@ -263,7 +275,7 @@ void FIRNet::forward(const State &state,
 
 float FIRNet::train_step(const MiniBatch *batch) {
 	MX_TRY
-	data_train.SyncCopyFromCPU(batch->data, BATCH_SIZE * 4 * BOARD_SIZE);
+	data_train.SyncCopyFromCPU(batch->data, BATCH_SIZE * INPUT_FEATURE_NUM * BOARD_SIZE);
 	plc_label.SyncCopyFromCPU(batch->p_label, BATCH_SIZE * BOARD_SIZE);
 	val_label.SyncCopyFromCPU(batch->v_label, BATCH_SIZE);
 	loss_train->Forward(true);

@@ -19,7 +19,8 @@ public:
 	MCTSNode *cut(Move occurred);
 	std::pair<Move, MCTSNode*> select(float c_puct) const;
 	Move most_visted() const;
-	Move act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise = false, float noise_rate = 0) const;
+	Move act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise = false,
+		float noise_rate = 0, float temp = 1e-3) const;
 	void update(float leafValue);
 	void update_recursive(float leafValue);
 	float value(float c_puct) const;

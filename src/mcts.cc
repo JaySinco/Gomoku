@@ -61,13 +61,13 @@ void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
 	}
 }
 
-Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate) const {
+Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, float noise_rate, float temp) const {
 	float move_priors_buffer[BOARD_SIZE] = { 0.0f };
 	if (mcts_move_priors == nullptr)
 		mcts_move_priors = move_priors_buffer;
 	const size_t child_n = children.size();
 	auto noise_theta = new float[child_n];
-	gen_ran_dirichlet(child_n, 0.3f, noise_theta);
+	gen_ran_dirichlet(child_n, DIRICHLET_ALPHA, noise_theta);
 	float noise_added[BOARD_SIZE] = { 0.0f };
 	int child_cnt = 0;
 	std::map<int, float> move_priors_map;
@@ -78,7 +78,7 @@ Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], bool add_noise, f
 		if (DEBUG_MCTS_PROB)
 			std::cout << mn.first << ": " << *mn.second << std::endl;
 		auto vn = mn.second->visits;
-		move_priors_map[mn.first.z()] = 1.0f / TEMPERATURE_RATE * std::log(float(vn) + 1e-10);
+		move_priors_map[mn.first.z()] = 1.0f / temp * std::log(float(vn) + 1e-10);
 		if (move_priors_map[mn.first.z()] > alpha)
 			alpha = move_priors_map[mn.first.z()];
 		noise_added[mn.first.z()] = noise_theta[child_cnt];
@@ -236,13 +236,10 @@ Move MCTSDeepPlayer::play(const State &state) {
 }
 
 void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
+	LOG(INFO) << "training network with parameter: " << "itermax=" << itermax << ", c_puct=" << c_puct;
 	auto trainee = MCTSDeepPlayer("trainee", net, itermax);
-	int enemy_itermax = 1000;
+	int enemy_itermax = PURE_MCTS_ITERMAX;
 	auto enemy = MCTSPurePlayer("enemy", enemy_itermax);
-	LOG(INFO) << "training configuration: " << "itermax=" << itermax << ", c_puct=" << c_puct
-		<< ", batch_size=" << BATCH_SIZE << ", epoch_per_game=" << EPOCH_PER_GAME
-		<< ", buffer_size=" << BUFFER_SIZE << ", weight_decay=" << WEIGHT_DECAY
-		<< ", learning_rate=" << LEARNING_RATE;
 	long long update_cnt = 0;
 	long long game_cnt = 0;
 	float avg_turn = 0.0f;
@@ -260,7 +257,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(itermax, c_puct, game, net, root);
-			Move act = root->act_by_prob(one_step.p_label, true, 0.25);
+			Move act = root->act_by_prob(one_step.p_label, true, 0.25, 1.0f);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
@@ -310,7 +307,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net, int itermax, float c_puct) {
 			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
 				<< enemy_itermax << "), lose_prob=" << lose_prob;
 			if (lose_prob < 1e-3) {
-				enemy_itermax += 1000;
+				enemy_itermax += PURE_MCTS_ITERMAX;
 				enemy.reset_itermax(enemy_itermax);
 			}
 		}

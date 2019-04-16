@@ -7,8 +7,9 @@ std::random_device global_random_device;
 std::mt19937 global_random_engine(global_random_device());
 
 int main() {
+	show_global_cfg(std::cout);
 	auto net = std::make_shared<FIRNet>();
-	//auto net1 = std::make_shared<FIRNet>("FIR-8x8by5_best.param");
+	//auto net1 = std::make_shared<FIRNet>("FIR-6x6by4_7700.param");
 	//auto net2 = std::make_shared<FIRNet>("FIR-8x8by5_4300.param");
 	//auto p1 = RandomPlayer("p1");
 	//auto p2 = HumanPlayer("jaysinco");

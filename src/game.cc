@@ -81,8 +81,8 @@ Color State::current() const {
 	return ~board.get(last);
 }
 
-void State::fill_feature_array(float data[4 * BOARD_SIZE]) const {
-	if (last.z() == NO_MOVE_YET) {
+void State::fill_feature_array(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) const {
+	if (INPUT_FEATURE_NUM > 3 && last.z() == NO_MOVE_YET) {
 		for (int r = 0; r < BOARD_MAX_ROW; ++r)
 			for (int c = 0; c < BOARD_MAX_COL; ++c)
 				data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
@@ -98,10 +98,12 @@ void State::fill_feature_array(float data[4 * BOARD_SIZE]) const {
 				data[r * BOARD_MAX_COL + c] = 1.0f;
 			else if (side == enemy_side)
 				data[BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
-			data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = first;
+			if (INPUT_FEATURE_NUM > 3)
+				data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = first;
 		}
 	}
-	data[2 * BOARD_SIZE  + last.r() * BOARD_MAX_COL + last.c()] = 1.0f;
+	if (INPUT_FEATURE_NUM > 2)
+		data[2 * BOARD_SIZE  + last.r() * BOARD_MAX_COL + last.c()] = 1.0f;
 }
 
 void State::next(Move mv) {
