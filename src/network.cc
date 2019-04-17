@@ -1,4 +1,5 @@
 #include <iomanip>
+
 #include "network.h"
 
 #define MX_TRY \
@@ -256,8 +257,20 @@ void FIRNet::save_parameters(const std::string &file_name) {
 	MX_CATCH
 }
 
+void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
+	std::gamma_distribution<float> gamma(alpha, 1.0f);
+	float norm = 0.0;
+	for (size_t i = 0; i < K; i++) {
+		theta[i] = gamma(global_random_engine);
+		norm += theta[i];
+	}
+	for (size_t i = 0; i < K; i++) {
+		theta[i] /= norm;
+	}
+}
+
 void FIRNet::forward(const State &state,
-		float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
+		float value[1], std::vector<std::pair<Move, float>> &net_move_priors, bool add_noise) {
 	MX_TRY
 	float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
 	state.fill_feature_array(data);
@@ -266,9 +279,29 @@ void FIRNet::forward(const State &state,
 	val_predict->Forward(false);
 	NDArray::WaitAll();
 	const float *plc_ptr = plc_predict->outputs[0].GetData();
+	float priors_sum = 0.0f;
 	for (const auto mv : state.get_options()) {
-		net_move_priors.push_back(std::make_pair(mv, plc_ptr[mv.z()]));
+		float prior = plc_ptr[mv.z()];
+		net_move_priors.push_back(std::make_pair(mv, prior));
+		priors_sum += prior;
 	}
+	for (auto &item : net_move_priors)
+		item.second /= priors_sum;
+	if (add_noise) {
+		auto noise_added = new float[net_move_priors.size()];
+		gen_ran_dirichlet(net_move_priors.size(), DIRICHLET_ALPHA, noise_added);
+		int prior_cnt = 0;
+		for (auto &item : net_move_priors) {
+			item.second = 0.75 * item.second + 0.25 * noise_added[prior_cnt];
+			++prior_cnt;
+		}
+		delete [] noise_added;
+	}
+	float check_sum = 0;
+	for (const auto &item : net_move_priors)
+		check_sum += item.second;
+	if (check_sum < 0.99)
+		LOG(INFO) << "network move priors reach low bound: " << check_sum;
 	value[0] = val_predict->outputs[0].GetData()[0];
 	MX_CATCH
 }

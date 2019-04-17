@@ -82,10 +82,12 @@ Color State::current() const {
 }
 
 void State::fill_feature_array(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) const {
-	if (INPUT_FEATURE_NUM > 3 && last.z() == NO_MOVE_YET) {
-		for (int r = 0; r < BOARD_MAX_ROW; ++r)
-			for (int c = 0; c < BOARD_MAX_COL; ++c)
-				data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
+	if (last.z() == NO_MOVE_YET) {
+		if (INPUT_FEATURE_NUM > 3) {
+			for (int r = 0; r < BOARD_MAX_ROW; ++r)
+				for (int c = 0; c < BOARD_MAX_COL; ++c)
+					data[3 * BOARD_SIZE + r * BOARD_MAX_COL + c] = 1.0f;
+		}
 		return;
 	}
 	auto own_side = current();
