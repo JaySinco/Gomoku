@@ -64,7 +64,7 @@ public:
 	Color current() const;
 	bool first_hand() const { return current() == Color::Black; }
 	void State::fill_feature_array(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) const;
-	const std::vector<Move> &get_options() const { assert(winner == Color::Empty); return opts; };
+	const std::vector<Move> &get_options() const { assert(!over()); return opts; };
 	bool valid(Move mv) const { return std::find(opts.cbegin(), opts.cend(), mv) != opts.end(); }
 	bool over() const { return winner != Color::Empty || opts.size() == 0; }
 	void next(Move mv);

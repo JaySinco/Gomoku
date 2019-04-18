@@ -235,6 +235,7 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	args_map.erase("val_label");
 	optimizer = OptimizerRegistry::Find("sgd");
 	optimizer->SetParam("momentum", 0.9)
+		->SetParam("clip_gradient", 10)
 		->SetParam("lr", LEARNING_RATE)
 		->SetParam("wd", WEIGHT_DECAY);
 	MX_CATCH
@@ -257,20 +258,8 @@ void FIRNet::save_parameters(const std::string &file_name) {
 	MX_CATCH
 }
 
-void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
-	std::gamma_distribution<float> gamma(alpha, 1.0f);
-	float norm = 0.0;
-	for (size_t i = 0; i < K; i++) {
-		theta[i] = gamma(global_random_engine);
-		norm += theta[i];
-	}
-	for (size_t i = 0; i < K; i++) {
-		theta[i] /= norm;
-	}
-}
-
 void FIRNet::forward(const State &state,
-		float value[1], std::vector<std::pair<Move, float>> &net_move_priors, bool add_noise) {
+		float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
 	MX_TRY
 	float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
 	state.fill_feature_array(data);
@@ -285,23 +274,16 @@ void FIRNet::forward(const State &state,
 		net_move_priors.push_back(std::make_pair(mv, prior));
 		priors_sum += prior;
 	}
-	for (auto &item : net_move_priors)
-		item.second /= priors_sum;
-	if (add_noise) {
-		auto noise_added = new float[net_move_priors.size()];
-		gen_ran_dirichlet(net_move_priors.size(), DIRICHLET_ALPHA, noise_added);
-		int prior_cnt = 0;
-		for (auto &item : net_move_priors) {
-			item.second = 0.75 * item.second + 0.25 * noise_added[prior_cnt];
-			++prior_cnt;
-		}
-		delete [] noise_added;
+	if (priors_sum < 1e-10) {
+		LOG(INFO) << "wield policy probality yield by network: sum=" << priors_sum
+			<< ", available_move_n=" << net_move_priors.size();
+		for (auto &item : net_move_priors)
+			item.second = 1.0f / float(net_move_priors.size());
 	}
-	float check_sum = 0;
-	for (const auto &item : net_move_priors)
-		check_sum += item.second;
-	if (check_sum < 0.99)
-		LOG(INFO) << "network move priors reach low bound: " << check_sum;
+	else {
+		for (auto &item : net_move_priors)
+			item.second /= priors_sum;
+	}
 	value[0] = val_predict->outputs[0].GetData()[0];
 	MX_CATCH
 }

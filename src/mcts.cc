@@ -1,3 +1,5 @@
+#include <iomanip>
+
 #include "mcts.h"
 
 MCTSNode::~MCTSNode() {
@@ -32,7 +34,7 @@ std::pair<Move, MCTSNode*> MCTSNode::select(float c_puct) const {
 	return picked;
 }
 
-Move MCTSNode::most_visted() const {
+Move MCTSNode::act_by_most_visted() const {
 	int max_visit = -1 * std::numeric_limits<int>::max();
 	Move act(NO_MOVE_YET);
 	if (DEBUG_MCTS_PROB)
@@ -77,8 +79,7 @@ Move MCTSNode::act_by_prob(float mcts_move_priors[BOARD_SIZE], float temp) const
 	float check_sum = 0;
 	for (int i = 0; i < BOARD_SIZE; ++i)
 		check_sum += mcts_move_priors[i];
-	if (check_sum < 0.99)
-		LOG(INFO) << "mcts move priors reach low bound: " << check_sum;
+	assert(check_sum > 0.99);
 	std::discrete_distribution<int> discrete(mcts_move_priors, mcts_move_priors + BOARD_SIZE);
 	return Move(discrete(global_random_engine));
 }
@@ -95,6 +96,29 @@ void MCTSNode::update_recursive(float leafValue) {
 	update(leafValue);
 }
 
+void gen_ran_dirichlet(const size_t K, float alpha, float theta[]) {
+	std::gamma_distribution<float> gamma(alpha, 1.0f);
+	float norm = 0.0;
+	for (size_t i = 0; i < K; i++) {
+		theta[i] = gamma(global_random_engine);
+		norm += theta[i];
+	}
+	for (size_t i = 0; i < K; i++) {
+		theta[i] /= norm;
+	}
+}
+
+void MCTSNode::add_noise_to_child_prior(float noise_rate) {
+	auto noise_added = new float[children.size()];
+	gen_ran_dirichlet(children.size(), DIRICHLET_ALPHA, noise_added);
+	int prior_cnt = 0;
+	for (auto &item : children) {
+		item.second->prior = (1 - noise_rate) * item.second->prior + noise_rate * noise_added[prior_cnt];
+		++prior_cnt;
+	}
+	delete [] noise_added;
+}
+
 float MCTSNode::value(float c_puct) const {
 	assert(!is_root());
 	float N = float(parent->visits);
@@ -104,8 +128,12 @@ float MCTSNode::value(float c_puct) const {
 
 std::ostream &operator<<(std::ostream &out, const MCTSNode &node) {
 	return out << "MCTSNode(" << node.parent << "): "
-		<< node.children.size() << " children, " << node.visits << " visits, "
-		<< node.prior << " prior, " << node.quality << " quality";
+		<< std::setw(3) << node.children.size() << " children, "
+		<< std::setw(3) << node.visits << " visits, "
+		<< std::setw(6) << std::fixed << std::setprecision(3)
+		<< node.prior * 100 << "% prior, "
+		<< std::setw(6) << std::fixed << std::setprecision(3)
+		<< node.quality << " quality";
 }
 
 MCTSPurePlayer::MCTSPurePlayer(const std::string &name, int itermax, float c_puct)
@@ -131,15 +159,13 @@ Move MCTSPurePlayer::play(const State &state) {
 		}
 		Color enemy_side = state_copied.current();
 		Color winner = state_copied.get_winner();
-		if (winner == Color::Empty) {
+		if (!state_copied.over()) {
 			int n_options = state_copied.get_options().size();
-			if (n_options > 0) {
-				std::vector<std::pair<Move, float>> move_priors;
-				for (const auto mv : state_copied.get_options()) {
-					move_priors.push_back(std::make_pair(mv, 1.0f / float(n_options)));
-				}
-				node->expand(move_priors);
+			std::vector<std::pair<Move, float>> move_priors;
+			for (const auto mv : state_copied.get_options()) {
+				move_priors.push_back(std::make_pair(mv, 1.0f / float(n_options)));
 			}
+			node->expand(move_priors);
 			winner = state_copied.next_rand_till_end();
 		}
 		float leaf_value;
@@ -148,10 +174,10 @@ Move MCTSPurePlayer::play(const State &state) {
 		else if (winner == ~enemy_side)
 			leaf_value = 1.0f;
 		else
-			leaf_value = 0.0f;;
+			leaf_value = 0.0f;
 		node->update_recursive(leaf_value);
 	}
-	Move act = root->most_visted();
+	Move act = root->act_by_most_visted();
 	swap_root(root->cut(act));
 	return act;
 }
@@ -168,6 +194,8 @@ void MCTSDeepPlayer::reset() {
 
 void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state,
 		std::shared_ptr<FIRNet> net, MCTSNode *root, bool add_noise_to_root) {
+	if (add_noise_to_root)
+		root->add_noise_to_child_prior(NOISE_RATE);
 	for (int i = 0; i < itermax; ++i) {
 		State state_copied(state);
 		MCTSNode *node = root;
@@ -177,18 +205,14 @@ void MCTSDeepPlayer::think(int itermax, float c_puct, const State &state,
 			state_copied.next(move_node.first);
 		}
 		float leaf_value;
-		Color winner = state_copied.get_winner();
-		if (winner == Color::Empty) {
+		if (!state_copied.over()) {
 			std::vector<std::pair<Move, float>> net_move_priors;
-			net->forward(state_copied, &leaf_value, net_move_priors, (add_noise_to_root && node == root));
+			net->forward(state_copied, &leaf_value, net_move_priors);
 			node->expand(net_move_priors);
 			leaf_value *= -1;
 		}
 		else {
-			Color enemy_side = state_copied.current();
-			if (winner == enemy_side)
-				leaf_value = -1.0f;
-			else if (winner == ~enemy_side)
+			if (state_copied.get_winner() != Color::Empty)
 				leaf_value = 1.0f;
 			else
 				leaf_value = 0.0f;
@@ -201,7 +225,7 @@ Move MCTSDeepPlayer::play(const State &state) {
 	if (!(state.get_last().z() == NO_MOVE_YET) && !root->is_leaf())
 		swap_root(root->cut(state.get_last()));
 	think(itermax, c_puct, state, net, root);
-	Move act = root->act_by_prob(nullptr);
+	Move act = root->act_by_prob(nullptr, 1e-3);
 	swap_root(root->cut(act));
 	return act;
 }
@@ -220,15 +244,17 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net) {
 		MCTSNode *root = new MCTSNode(nullptr, 1.0f);
 		std::vector<SampleData> record;
 		float ind = -1.0f;
-		int turn = 0;
+		int step = 0;
 		while (!game.over()) {
-			++turn;
+			++step;
 			ind *= -1.0f;
 			SampleData one_step;
 			*one_step.v_label = ind;
 			game.fill_feature_array(one_step.data);
 			MCTSDeepPlayer::think(TRAIN_DEEP_MCTS_ITERMAX, C_PUCT_DEFAULT, game, net, root, true);
-			Move act = root->act_by_prob(one_step.p_label, 1.0f);
+			Move act = root->act_by_prob(one_step.p_label, step <= EXPLORE_STEP ? 1.0f : 1e-3);
+			if (RANDOM_OPENING && step == 1)
+				act = game.get_options().at(0);
 			record.push_back(one_step);
 			game.next(act);
 			auto temp = root->cut(act);
@@ -248,13 +274,13 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net) {
 				(*step.v_label) = 0.0f;
 		}
 		for (auto &step : record) {
+			if (DEBUG_TRAIN_DATA)
+				std::cout << step << std::endl;
 			dataset.push_with_transform(&step);
 		}
-		if (DEBUG_TRAIN_DATA)
-			std::cout << dataset << std::endl;
 		if (dataset.total() > BATCH_SIZE) {
 			++game_cnt;
-			avg_turn += (turn - avg_turn) / float(game_cnt > 5 ? 5 : game_cnt);
+			avg_turn += (step - avg_turn) / float(game_cnt > 5 ? 5 : game_cnt);
 			MiniBatch batch;
 			dataset.make_mini_batch(&batch);
 			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
