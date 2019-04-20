@@ -122,18 +122,22 @@ void MCTSNode::add_noise_to_child_prior(float noise_rate) {
 float MCTSNode::value(float c_puct) const {
 	assert(!is_root());
 	float N = float(parent->visits);
-	float n = float(1 + visits);
+	float n = visits == 0 ? 1e-4 : visits;
 	return quality + (c_puct * prior * std::sqrt(N) / n);
 }
 
 std::ostream &operator<<(std::ostream &out, const MCTSNode &node) {
-	return out << "MCTSNode(" << node.parent << "): "
-		<< std::setw(3) << node.children.size() << " children, "
-		<< std::setw(3) << node.visits << " visits, "
+	out << "MCTSNode(" << node.parent << "): "
+		<< std::setw(3) << node.children.size() << " children, ";
+	if (node.parent != nullptr)
+		out << std::setw(6) << std::fixed << std::setprecision(3)
+			<< float(node.visits) / float(node.parent->visits) * 100 << "% / ";
+	out	<< std::setw(3) << node.visits << " visits, "
 		<< std::setw(6) << std::fixed << std::setprecision(3)
 		<< node.prior * 100 << "% prior, "
 		<< std::setw(6) << std::fixed << std::setprecision(3)
 		<< node.quality << " quality";
+	 return out;
 }
 
 MCTSPurePlayer::MCTSPurePlayer(const std::string &name, int itermax, float c_puct)
@@ -299,7 +303,7 @@ void train_mcts_deep(std::shared_ptr<FIRNet> net) {
 			net->save_parameters(filename.str());
 		}
 		if (game_cnt > 0 && game_cnt % 30 == 0) {
-			constexpr int sim_game = 24;
+			constexpr int sim_game = 10;
 			float lose_prob = 1 - benchmark(trainee, enemy, sim_game);
 			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
 				<< enemy_itermax << "), lose_prob=" << lose_prob;
