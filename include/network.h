@@ -1,3 +1,5 @@
+#pragma once
+
 #include <mxnet-cpp/MxNetCpp.h>
 
 #include "game.h"

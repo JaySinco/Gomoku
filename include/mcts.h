@@ -36,7 +36,7 @@ class MCTSPurePlayer: public Player {
 	MCTSNode *root;
 	void swap_root(MCTSNode * new_root) { delete root; root = new_root; }
 public:
-	MCTSPurePlayer(const std::string &name, int itermax, float c_puct = C_PUCT_DEFAULT);
+	MCTSPurePlayer(const std::string &name, int itermax, float c_puct);
 	~MCTSPurePlayer() { delete root; }
 	const std::string &name() const override { return id; }
 	void reset_itermax(int n) { itermax = n; }
@@ -54,7 +54,7 @@ class MCTSDeepPlayer : public Player {
 	void swap_root(MCTSNode * new_root) { delete root; root = new_root; }
 public:
 	MCTSDeepPlayer(const std::string &name, std::shared_ptr<FIRNet> nn,
-		int itermax, float c_puct = C_PUCT_DEFAULT);
+		int itermax, float c_puct);
 	~MCTSDeepPlayer() { delete root; }
 	const std::string &name() const override { return id; }
 	void reset() override;
@@ -63,4 +63,3 @@ public:
 		std::shared_ptr<FIRNet> net, MCTSNode *root, bool add_noise_to_root = false);
 };
 
-void train_mcts_deep(std::shared_ptr<FIRNet> net);
