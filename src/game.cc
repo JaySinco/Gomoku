@@ -27,7 +27,8 @@ std::ostream &operator<<(std::ostream &out, Color c) {
 }
 
 std::ostream &operator<<(std::ostream &out, Move mv) {
-	return out << "(" << mv.r() << ", " << mv.c() << ")";
+	return out << "(" << std::setw(2) << mv.r() << ", "
+		<< std::setw(2) << mv.c() << ")";
 }
 
 void Board::push_valid(std::vector<Move> &set) const {

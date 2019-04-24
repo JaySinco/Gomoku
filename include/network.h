@@ -46,6 +46,7 @@ class FIRNet {
 
 	const Context ctx;
 	std::map<std::string, NDArray> args_map;
+	std::map<std::string, NDArray> aux_map;
 	std::vector<std::string> loss_arg_names;
 	Symbol plc, val, loss;
 	NDArray data_predict, data_train, plc_label, val_label;
@@ -58,4 +59,5 @@ public:
 	void forward(const State &state,
 		float value[1], std::vector<std::pair<Move, float>> &move_priors);
 	float train_step(const MiniBatch *batch);
+
 };

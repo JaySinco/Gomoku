@@ -155,9 +155,9 @@ Symbol convolution_layer(const std::string &name, Symbol data,
 Symbol residual_layer(const std::string &name, Symbol data,
 		int num_filter) {
 	Symbol conv1 = convolution_layer(name + "_conv1_layer", data, num_filter,
-		Shape(3, 3), Shape(1, 1), Shape(1, 1), true, false);
+		Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
 	Symbol conv2 = convolution_layer(name + "_conv2_layer", conv1, num_filter,
-		Shape(3, 3), Shape(1, 1), Shape(1, 1), false, false);
+		Shape(3, 3), Shape(1, 1), Shape(1, 1), false, true);
 	return Activation("relu_" + name, data + conv2, "relu");
 }
 
@@ -170,18 +170,15 @@ Symbol residual_block(const std::string &name, Symbol data,
 }
 
 Symbol middle_layer(Symbol data) {
-	Symbol middle_conv1 = convolution_layer("middle_conv1", data,
-		32, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, false);
-	Symbol middle_conv2 = convolution_layer("middle_conv2", middle_conv1,
-		64, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, false);
-	Symbol middle_conv3 = convolution_layer("middle_conv3", middle_conv2,
-		128, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, false);
-	return middle_conv3;
+	Symbol middle_conv = convolution_layer("middle_conv", data,
+		128, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
+	Symbol middle_residual = residual_block("middle_residual", middle_conv, 9, 128);
+	return middle_residual;
 }
 
 std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 	Symbol plc_conv = convolution_layer("plc_conv", data,
-		INPUT_FEATURE_NUM, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
+		2, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, true);
 	Symbol plc_logist_out = dense_layer("plc_logist_out", plc_conv, BOARD_SIZE, "None");
 	Symbol plc_out = softmax("plc_out", plc_logist_out);
 	Symbol plc_m_loss = -1 * elemwise_mul(label, log_softmax(plc_logist_out));
@@ -191,14 +188,14 @@ std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 
 std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 	Symbol val_conv = convolution_layer("val_conv", data,
-		INPUT_FEATURE_NUM, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, false);
-	Symbol val_dense = dense_layer("val_dense", val_conv, 64, "relu");
+		1, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, true);
+	Symbol val_dense = dense_layer("val_dense", val_conv, 128, "relu");
 	Symbol val_out = dense_layer("val_logist_out", val_dense, 1, "tanh");
 	Symbol val_loss = MakeLoss(mean(square(elemwise_sub(val_out, label))));
 	return std::make_pair(val_out, val_loss);
 }
 
-FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
+FIRNet::FIRNet(const std::string &param_file) : ctx(Context::cpu()),
 		data_predict(NDArray(Shape(1, INPUT_FEATURE_NUM, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		data_train(NDArray(Shape(BATCH_SIZE, INPUT_FEATURE_NUM, BOARD_MAX_ROW, BOARD_MAX_COL), ctx)),
 		plc_label(NDArray(Shape(BATCH_SIZE, BOARD_SIZE), ctx)),
@@ -212,7 +209,14 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	loss = plc_pair.second + val_pair.second;
 	if (param_file != "None") {
 		LOG(INFO) << "loading parameters from " << param_file;
-		NDArray::Load(param_file, nullptr, &args_map);
+		std::map<std::string, NDArray> param_map;
+		NDArray::Load(param_file, nullptr, &param_map);
+		for (const auto &param : param_map) {
+			if (param.first.size() > 5 && param.first.substr(0, 5) == "_AUX_")
+				aux_map.insert(std::make_pair(param.first.substr(5), param.second));
+			else
+				args_map.insert(std::make_pair(param.first, param.second));
+		}
 	}
 	loss_arg_names = loss.ListArguments();
 	args_map["data"] = data_train;
@@ -220,16 +224,32 @@ FIRNet::FIRNet(const std::string &param_file) :ctx(Context::cpu()),
 	args_map["val_label"] = val_label;
 	if (param_file == "None") {
 		loss.InferArgsMap(ctx, &args_map, args_map);
-		auto initializer = Xavier(Xavier::gaussian, Xavier::in, 2.34);
-		//auto initializer = Uniform(0.01);
+		auto xavier_init = Xavier(Xavier::gaussian, Xavier::in, 2.34);
 		for (auto &arg : args_map) {
-			initializer(arg.first, &arg.second);
+			xavier_init(arg.first, &arg.second);
+		}
+
+		loss_train = loss.SimpleBind(ctx, args_map);
+
+		aux_map = loss_train->aux_dict();
+		auto zero_init = Constant(0.0f);
+		auto ten_init = Constant(10.0f);
+		for (auto &arg : aux_map) {
+			if (arg.first.find("_bn_mmean") != -1)
+				zero_init(arg.first, &arg.second);
+			else if (arg.first.find("_bn_mvar") != -1)
+				ten_init(arg.first, &arg.second);
 		}
 	}
-	loss_train = loss.SimpleBind(ctx, args_map);
+	else {
+		loss_train = loss.SimpleBind(ctx, args_map, std::map<std::string, NDArray>(),
+			std::map<std::string, OpReqType>(), aux_map);
+	}
 	args_map["data"] = data_predict;
-	plc_predict = plc.SimpleBind(ctx, args_map);
-	val_predict = val.SimpleBind(ctx, args_map);
+	plc_predict = plc.SimpleBind(ctx, args_map, std::map<std::string, NDArray>(),
+		std::map<std::string, OpReqType>(), aux_map);
+	val_predict = val.SimpleBind(ctx, args_map, std::map<std::string, NDArray>(),
+		std::map<std::string, OpReqType>(), aux_map);
 	args_map.erase("data");
 	args_map.erase("plc_label");
 	args_map.erase("val_label");
@@ -251,10 +271,14 @@ FIRNet::~FIRNet() {
 	MX_CATCH
 }
 
-void FIRNet::save_parameters(const std::string &file_name) {
+void FIRNet::save_parameters(const std::string &param_file) {
 	MX_TRY
-	LOG(INFO) << "saving parameters into " << file_name;
-	NDArray::Save(file_name, args_map);
+	LOG(INFO) << "saving parameters into " << param_file;
+	std::map<std::string, NDArray> param_map(args_map);
+	for (const auto &aux : aux_map) {
+		param_map.insert(std::make_pair("_AUX_" + aux.first, aux.second));
+	}
+	NDArray::Save(param_file, param_map);
 	MX_CATCH
 }
 

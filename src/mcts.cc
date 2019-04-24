@@ -122,7 +122,7 @@ void MCTSNode::add_noise_to_child_prior(float noise_rate) {
 float MCTSNode::value(float c_puct) const {
 	assert(!is_root());
 	float N = float(parent->visits);
-	float n = visits == 0 ? 1e-4 : visits;
+	float n = visits + 1;
 	return quality + (c_puct * prior * std::sqrt(N) / n);
 }
 

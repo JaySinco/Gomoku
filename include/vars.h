@@ -4,19 +4,19 @@
 #include <iostream>
 
 constexpr int FIVE_IN_ROW = 5;
-constexpr int BOARD_MAX_ROW = 8;
-constexpr int BOARD_MAX_COL = 8;
+constexpr int BOARD_MAX_ROW = 15;
+constexpr int BOARD_MAX_COL = 15;
 constexpr int INPUT_FEATURE_NUM = 4;
 constexpr int BATCH_SIZE = 512;
 constexpr int BUFFER_SIZE = 10000;
 constexpr int EPOCH_PER_GAME = 5;
 constexpr int TEST_PURE_ITERMAX = 1000;
-constexpr int TRAIN_DEEP_ITERMAX = 400;
-constexpr int EXPLORE_STEP = 20;
+constexpr int TRAIN_DEEP_ITERMAX = 500;
+constexpr int EXPLORE_STEP = 30;
 constexpr float C_PUCT = 1.0;
-constexpr float LEARNING_RATE = 1e-3;
+constexpr float LEARNING_RATE = 3e-3;
 constexpr float WEIGHT_DECAY = 1e-4;
-constexpr float DIRICHLET_ALPHA = 0.3;
+constexpr float DIRICHLET_ALPHA = 0.03;
 constexpr float NOISE_RATE = 0.25;
 
 constexpr bool DEBUG_MCTS_PROB = false;
