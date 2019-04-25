@@ -171,8 +171,8 @@ Symbol residual_block(const std::string &name, Symbol data,
 
 Symbol middle_layer(Symbol data) {
 	Symbol middle_conv = convolution_layer("middle_conv", data,
-		128, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
-	Symbol middle_residual = residual_block("middle_residual", middle_conv, 9, 128);
+		NET_NUM_FILTER, Shape(3, 3), Shape(1, 1), Shape(1, 1), true, true);
+	Symbol middle_residual = residual_block("middle_residual", middle_conv, NET_NUM_RESIDUAL_BLOCK, NET_NUM_FILTER);
 	return middle_residual;
 }
 
@@ -189,7 +189,7 @@ std::pair<Symbol, Symbol> plc_layer(Symbol data, Symbol label) {
 std::pair<Symbol, Symbol> val_layer(Symbol data, Symbol label) {
 	Symbol val_conv = convolution_layer("val_conv", data,
 		1, Shape(1, 1), Shape(1, 1), Shape(0, 0), true, true);
-	Symbol val_dense = dense_layer("val_dense", val_conv, 128, "relu");
+	Symbol val_dense = dense_layer("val_dense", val_conv, NET_NUM_FILTER, "relu");
 	Symbol val_out = dense_layer("val_logist_out", val_dense, 1, "tanh");
 	Symbol val_loss = MakeLoss(mean(square(elemwise_sub(val_out, label))));
 	return std::make_pair(val_out, val_loss);

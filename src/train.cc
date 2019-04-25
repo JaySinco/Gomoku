@@ -58,20 +58,21 @@ void train(std::shared_ptr<FIRNet> net) {
 
 		if (dataset.total() > BATCH_SIZE) {
 			++game_cnt;
-			avg_turn += (step - avg_turn) / float(game_cnt > 3 ? 3 : game_cnt);
+			constexpr int game_per_log = 3;
+			avg_turn += (step - avg_turn) / float(game_cnt > game_per_log ? game_per_log : game_cnt);
 			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
 				auto batch = new MiniBatch();
 				dataset.make_mini_batch(batch);
 				float loss = net->train_step(batch);
 				++update_cnt;
-				if (update_cnt % (3 * EPOCH_PER_GAME) == 0) {
+				if (update_cnt % (game_per_log * EPOCH_PER_GAME) == 0) {
 					LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
 						<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
 				}
 				delete batch;
 			}
 		}
-		if (game_cnt > 0 && game_cnt % 30 == 0) {
+		if (game_cnt > 0 && game_cnt % 15 == 0) {
 			constexpr int sim_game = 10;
 			float lose_prob = 1 - benchmark(net_player, test_player, sim_game);
 			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
@@ -82,7 +83,7 @@ void train(std::shared_ptr<FIRNet> net) {
 			}
 		}
 
-		if (game_cnt > 0 && game_cnt % 50 == 0)
+		if (game_cnt > 0 && game_cnt % 30 == 0)
 			net->save_parameters(param_file_name(game_cnt));
 	}
 }

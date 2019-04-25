@@ -4,15 +4,17 @@
 #include <iostream>
 
 constexpr int FIVE_IN_ROW = 5;
-constexpr int BOARD_MAX_ROW = 15;
-constexpr int BOARD_MAX_COL = 15;
+constexpr int BOARD_MAX_ROW = 10;
+constexpr int BOARD_MAX_COL = 10;
 constexpr int INPUT_FEATURE_NUM = 4;
 constexpr int BATCH_SIZE = 512;
 constexpr int BUFFER_SIZE = 10000;
 constexpr int EPOCH_PER_GAME = 5;
 constexpr int TEST_PURE_ITERMAX = 1000;
-constexpr int TRAIN_DEEP_ITERMAX = 500;
+constexpr int TRAIN_DEEP_ITERMAX = 400;
 constexpr int EXPLORE_STEP = 30;
+constexpr int NET_NUM_FILTER = 64;
+constexpr int NET_NUM_RESIDUAL_BLOCK = 3;
 constexpr float C_PUCT = 1.0;
 constexpr float LEARNING_RATE = 3e-3;
 constexpr float WEIGHT_DECAY = 1e-4;
@@ -33,6 +35,7 @@ inline void show_global_cfg(std::ostream &out) {
 		<< "\nc_puct=" << C_PUCT << "\ndirichlet_alpha=" << DIRICHLET_ALPHA
 		<< "\nlearning_rate=" << LEARNING_RATE << "\nweight_decay=" << WEIGHT_DECAY
 		<< "\nexplore_step=" << EXPLORE_STEP << "\nnoise_rate=" << NOISE_RATE
+		<< "\nnet_num_filter=" << NET_NUM_FILTER << "\nnet_num_resudual_block=" << NET_NUM_RESIDUAL_BLOCK
 		<< "\ntest_pure_itermax=" << TEST_PURE_ITERMAX
 		<< "\ntrain_deep_itermax=" << TRAIN_DEEP_ITERMAX
 		 << "\n" << std::endl;
