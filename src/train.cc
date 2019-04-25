@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include "train.h"
 #include "mcts.h"
 
@@ -41,8 +43,35 @@ int selfplay(std::shared_ptr<FIRNet> net, DataSet &dataset, int itermax) {
 	return step;
 }
 
+void adjust_lr(std::shared_ptr<FIRNet> net, long long step) {
+	switch (step) {
+	case LR_DROP_STEP1:
+		net->set_lr(INIT_LEARNING_RATE / 10);
+		LOG(INFO) << "adjusted learning_rate=" << INIT_LEARNING_RATE / 10;
+		break;
+	case LR_DROP_STEP2:
+		net->set_lr(INIT_LEARNING_RATE / 100);
+		LOG(INFO) << "adjusted learning_rate=" << INIT_LEARNING_RATE / 100;
+		break;
+	}
+}
+
+bool trigger_timer(std::chrono::time_point<std::chrono::system_clock> &last, int per_minute) {
+	auto now = std::chrono::system_clock::now();
+	auto sec = std::chrono::duration_cast<std::chrono::seconds>(now - last).count();
+	if (sec >= per_minute * 60) {
+		last = now;
+		return true;
+	}
+	return false;
+}
+
 void train(std::shared_ptr<FIRNet> net) {
 	LOG(INFO) << "start training...";
+
+	auto last_log = std::chrono::system_clock::now();
+	auto last_save = std::chrono::system_clock::now();
+	auto last_benchmark = std::chrono::system_clock::now();
 
 	long long update_cnt = 0;
 	long long game_cnt = 0;
@@ -54,36 +83,34 @@ void train(std::shared_ptr<FIRNet> net) {
 	auto net_player = MCTSDeepPlayer("net_player", net, TRAIN_DEEP_ITERMAX, C_PUCT);
 
 	for (;;) {
+		++game_cnt;
 		int step = selfplay(net, dataset, TRAIN_DEEP_ITERMAX);
-
+		avg_turn += (step - avg_turn) / float(game_cnt);
 		if (dataset.total() > BATCH_SIZE) {
-			++game_cnt;
-			constexpr int game_per_log = 3;
-			avg_turn += (step - avg_turn) / float(game_cnt > game_per_log ? game_per_log : game_cnt);
 			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
 				auto batch = new MiniBatch();
 				dataset.make_mini_batch(batch);
 				float loss = net->train_step(batch);
 				++update_cnt;
-				if (update_cnt % (game_per_log * EPOCH_PER_GAME) == 0) {
+				adjust_lr(net, update_cnt);
+				if (trigger_timer(last_log, MINUTE_PER_LOG)) {
 					LOG(INFO) << "loss=" << loss << ", dataset_total=" << dataset.total() << ", update_cnt="
 						<< update_cnt << ", avg_turn=" << avg_turn << ", game_cnt=" << game_cnt;
 				}
 				delete batch;
 			}
 		}
-		if (game_cnt > 0 && game_cnt % 15 == 0) {
-			constexpr int sim_game = 10;
-			float lose_prob = 1 - benchmark(net_player, test_player, sim_game);
-			LOG(INFO) << "benchmark " << sim_game << " games against MCTSPurePlayer(itermax="
-				<< test_itermax << "), lose_prob=" << lose_prob;
+		if (trigger_timer(last_benchmark, MINUTE_PER_BENCHMARK)) {
+			float lose_prob = 1 - benchmark(net_player, test_player, 10);
+			LOG(INFO) << "benchmark 10 games against MCTSPurePlayer(itermax=" << test_itermax
+				<< "), lose_prob=" << lose_prob;
 			if (lose_prob < 1e-3 && test_itermax < 15 * TEST_PURE_ITERMAX) {
 				test_itermax += TEST_PURE_ITERMAX;
-				test_player.reset_itermax(test_itermax);
+				test_player.set_itermax(test_itermax);
 			}
 		}
-
-		if (game_cnt > 0 && game_cnt % 30 == 0)
+		if (trigger_timer(last_save, MINUTE_PER_SAVE)) {
 			net->save_parameters(param_file_name(game_cnt));
+		}
 	}
 }

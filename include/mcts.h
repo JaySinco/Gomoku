@@ -39,7 +39,7 @@ public:
 	MCTSPurePlayer(const std::string &name, int itermax, float c_puct);
 	~MCTSPurePlayer() { delete root; }
 	const std::string &name() const override { return id; }
-	void reset_itermax(int n) { itermax = n; }
+	void set_itermax(int n) { itermax = n; }
 	void reset() override;
 	Move play(const State &state) override;
 
