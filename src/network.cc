@@ -135,7 +135,7 @@ Symbol dense_layer(const std::string &name, Symbol data,
 
 Symbol convolution_layer(const std::string &name, Symbol data,
 		int num_filter, Shape kernel, Shape stride, Shape pad,
-		bool use_act, bool use_bn = false) {
+		bool use_act, bool use_bn = USE_BATCH_NORM) {
 	Symbol conv_w(name + "_w");
 	Symbol conv_b(name + "_b");
 	Symbol out = Convolution("conv_" + name, data,
@@ -154,9 +154,9 @@ Symbol convolution_layer(const std::string &name, Symbol data,
 
 Symbol residual_layer(const std::string &name, Symbol data,
 		int num_filter) {
-	Symbol conv1 = convolution_layer(name + "_conv1_layer", data, num_filter,
+	Symbol conv1 = convolution_layer(name + "_conv1", data, num_filter,
 		Shape(3, 3), Shape(1, 1), Shape(1, 1), true);
-	Symbol conv2 = convolution_layer(name + "_conv2_layer", conv1, num_filter,
+	Symbol conv2 = convolution_layer(name + "_conv2", conv1, num_filter,
 		Shape(3, 3), Shape(1, 1), Shape(1, 1), false);
 	return Activation("relu_" + name, data + conv2, "relu");
 }
@@ -172,7 +172,7 @@ Symbol residual_block(const std::string &name, Symbol data,
 Symbol middle_layer(Symbol data) {
 	Symbol middle_conv = convolution_layer("middle_conv", data,
 		NET_NUM_FILTER, Shape(3, 3), Shape(1, 1), Shape(1, 1), true);
-	Symbol middle_residual = residual_block("middle_residual", middle_conv, NET_NUM_RESIDUAL_BLOCK, NET_NUM_FILTER);
+	Symbol middle_residual = residual_block("middle_res", middle_conv, NET_NUM_RESIDUAL_BLOCK, NET_NUM_FILTER);
 	return middle_residual;
 }
 
@@ -201,34 +201,16 @@ FIRNet::FIRNet(const std::string &param_file) : ctx(Context::cpu()),
 		plc_label(NDArray(Shape(BATCH_SIZE, BOARD_SIZE), ctx)),
 		val_label(NDArray(Shape(BATCH_SIZE, 1), ctx)) {
 	MX_TRY
-	auto middle = middle_layer(Symbol::Variable("data"));
-	auto plc_pair = plc_layer(middle, Symbol::Variable("plc_label"));
-	auto val_pair = val_layer(middle, Symbol::Variable("val_label"));
-	plc = plc_pair.first;
-	val = val_pair.first;
-	loss = plc_pair.second + val_pair.second;
-	if (param_file != "None") {
-		LOG(INFO) << "loading parameters from " << param_file;
-		NDArray::Load(param_file, nullptr, &args_map);
-	}
-	loss_arg_names = loss.ListArguments();
-	args_map["data"] = data_train;
-	args_map["plc_label"] = plc_label;
-	args_map["val_label"] = val_label;
+	build_graph();
+	if (param_file != "None")
+		load_param(param_file);
+	bind_train();
 	if (param_file == "None") {
 		loss.InferArgsMap(ctx, &args_map, args_map);
-		auto xavier_init = Xavier(Xavier::gaussian, Xavier::in, 2.34);
-		for (auto &arg : args_map) {
-			xavier_init(arg.first, &arg.second);
-		}
+		auxs_map = loss_train->aux_dict();
+		init_param();
 	}
-	loss_train = loss.SimpleBind(ctx, args_map);
-	args_map["data"] = data_predict;
-	plc_predict = plc.SimpleBind(ctx, args_map);
-	val_predict = val.SimpleBind(ctx, args_map);
-	args_map.erase("data");
-	args_map.erase("plc_label");
-	args_map.erase("val_label");
+	bind_predict();
 	optimizer = OptimizerRegistry::Find("sgd");
 	optimizer->SetParam("momentum", 0.9)
 		->SetParam("clip_gradient", 10)
@@ -243,19 +225,115 @@ FIRNet::~FIRNet() {
 	delete val_predict;
 	delete loss_train;
 	delete optimizer;
-	MXNotifyShutdown();
+	//MXNotifyShutdown();
 	MX_CATCH
+}
+
+void FIRNet::build_graph() {
+	auto middle = middle_layer(Symbol::Variable("data"));
+	auto plc_pair = plc_layer(middle, Symbol::Variable("plc_label"));
+	auto val_pair = val_layer(middle, Symbol::Variable("val_label"));
+	plc = plc_pair.first;
+	val = val_pair.first;
+	loss = plc_pair.second + val_pair.second;
+	loss_arg_names = loss.ListArguments();
+}
+
+void FIRNet::bind_train() {
+	args_map["data"] = data_train;
+	args_map["plc_label"] = plc_label;
+	args_map["val_label"] = val_label;
+	loss_train = loss.SimpleBind(ctx, args_map,
+		std::map<std::string, NDArray>(),
+		std::map<std::string, OpReqType>(),
+		auxs_map);
+}
+
+void FIRNet::bind_predict() {
+	args_map["data"] = data_predict;
+	plc_predict = plc.SimpleBind(ctx, args_map,
+		std::map<std::string, NDArray>(),
+		std::map<std::string, OpReqType>(),
+		auxs_map);
+	val_predict = val.SimpleBind(ctx, args_map,
+		std::map<std::string, NDArray>(),
+		std::map<std::string, OpReqType>(),
+		auxs_map);
+	args_map.erase("data");
+	args_map.erase("plc_label");
+	args_map.erase("val_label");
 }
 
 void FIRNet::set_lr(float learning_rate) {
 	optimizer->SetParam("lr", learning_rate);
 }
 
-void FIRNet::save_parameters(const std::string &file_name) {
+void FIRNet::init_param() {
+	auto xavier_init = Xavier(Xavier::gaussian, Xavier::in, 2.34);
+	for (auto &arg : args_map) {
+		xavier_init(arg.first, &arg.second);
+	}
+	auto mean_init = Constant(0.0f);
+	auto mvar_init = Constant(BN_MVAR_INIT);
+	for (auto &aux : auxs_map) {
+		if (aux.first.find("_bn_mmean") != -1)
+			mean_init(aux.first, &aux.second);
+		else if (aux.first.find("_bn_mvar") != -1)
+			mvar_init(aux.first, &aux.second);
+	}
+}
+
+void FIRNet::load_param(const std::string &file_name) {
+	LOG(INFO) << "loading parameters from " << file_name;
+	std::map<std::string, NDArray> param_map;
+	NDArray::Load(file_name, nullptr, &param_map);
+	for (const auto &param : param_map) {
+		if (param.first.size() > 5 && param.first.substr(0, 5) == "_AUX_")
+			auxs_map.insert(std::make_pair(param.first.substr(5), param.second));
+		else
+			args_map.insert(std::make_pair(param.first, param.second));
+	}
+}
+
+void FIRNet::save_param(const std::string &file_name) {
 	MX_TRY
 	LOG(INFO) << "saving parameters into " << file_name;
-	NDArray::Save(file_name, args_map);
+	std::map<std::string, NDArray> param_map(args_map);
+	for (const auto &aux : auxs_map)
+		param_map.insert(std::make_pair("_AUX_" + aux.first, aux.second));
+	NDArray::Save(file_name, param_map);
 	MX_CATCH
+}
+
+void brief_NDArray(std::ostream &out, const std::string &name, const NDArray &nd) {
+	out << std::left << std::setw(40) << name << " (";
+	auto shape = nd.GetShape();
+	for (int i = 0; i < shape.size(); ++i) {
+		out << shape[i];
+		if (i != shape.size() - 1)
+			out << ", ";
+	}
+	out << ") = [";
+	auto data = nd.GetData();
+	auto num = nd.Size() > 3 ? 3 : nd.Size();
+	for (int i = 0; i < num; ++i) {
+		out << data[i];
+		if (i != num - 1)
+			out << ", ";
+	}
+	if (num < nd.Size())
+		out << "...";
+	out << "]\n";
+}
+
+void FIRNet::show_param(std::ostream &out) {
+	out << "=== network parameters ===\n";
+	out << "\n********* trainable *********\n";
+	for (const auto &arg : args_map)
+		brief_NDArray(out, arg.first, arg.second);
+	out << "\n********* auxiliary *********\n";
+	for (const auto &aux : auxs_map)
+		brief_NDArray(out, aux.first, aux.second);
 }
 
 void FIRNet::forward(const State &state,
@@ -274,7 +352,7 @@ void FIRNet::forward(const State &state,
 		net_move_priors.push_back(std::make_pair(mv, prior));
 		priors_sum += prior;
 	}
-	if (priors_sum < 1e-10) {
+	if (priors_sum < 1e-8) {
 		LOG(INFO) << "wield policy probality yield by network: sum=" << priors_sum
 			<< ", available_move_n=" << net_move_priors.size();
 		for (auto &item : net_move_priors)

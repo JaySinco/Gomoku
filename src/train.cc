@@ -44,15 +44,15 @@ int selfplay(std::shared_ptr<FIRNet> net, DataSet &dataset, int itermax) {
 }
 
 void adjust_lr(std::shared_ptr<FIRNet> net, long long step) {
+	float multiplier = 1.0f;
 	switch (step) {
-	case LR_DROP_STEP1:
-		net->set_lr(INIT_LEARNING_RATE / 10);
-		LOG(INFO) << "adjusted learning_rate=" << INIT_LEARNING_RATE / 10;
-		break;
-	case LR_DROP_STEP2:
-		net->set_lr(INIT_LEARNING_RATE / 100);
-		LOG(INFO) << "adjusted learning_rate=" << INIT_LEARNING_RATE / 100;
-		break;
+	case LR_DROP_STEP1: multiplier = 1e-1; break;
+	case LR_DROP_STEP2: multiplier = 1e-2; break;
+	case LR_DROP_STEP3: multiplier = 1e-3; break;
+	}
+	if (multiplier < 1.0f) {
+		net->set_lr(INIT_LEARNING_RATE * multiplier);
+		LOG(INFO) << "adjusted learning_rate=" << INIT_LEARNING_RATE  * multiplier;
 	}
 }
 
@@ -85,7 +85,7 @@ void train(std::shared_ptr<FIRNet> net) {
 	for (;;) {
 		++game_cnt;
 		int step = selfplay(net, dataset, TRAIN_DEEP_ITERMAX);
-		avg_turn += (step - avg_turn) / float(game_cnt);
+		avg_turn += (step - avg_turn) / float(game_cnt > 10 ? 10 : game_cnt);
 		if (dataset.total() > BATCH_SIZE) {
 			for (int epoch = 0; epoch < EPOCH_PER_GAME; ++epoch) {
 				auto batch = new MiniBatch();
@@ -110,7 +110,7 @@ void train(std::shared_ptr<FIRNet> net) {
 			}
 		}
 		if (trigger_timer(last_save, MINUTE_PER_SAVE)) {
-			net->save_parameters(param_file_name(game_cnt));
+			net->save_param(param_file_name(game_cnt));
 		}
 	}
 }

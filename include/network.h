@@ -46,6 +46,7 @@ class FIRNet {
 
 	const Context ctx;
 	std::map<std::string, NDArray> args_map;
+	std::map<std::string, NDArray> auxs_map;
 	std::vector<std::string> loss_arg_names;
 	Symbol plc, val, loss;
 	NDArray data_predict, data_train, plc_label, val_label;
@@ -54,9 +55,15 @@ class FIRNet {
 public:
 	FIRNet(const std::string &param_file = "None");
 	~FIRNet();
-	void save_parameters(const std::string &file_name);
+	void init_param();
+	void save_param(const std::string &file_name);
+	void load_param(const std::string &file_name);
+	void show_param(std::ostream &out);
 	void forward(const State &state,
 		float value[1], std::vector<std::pair<Move, float>> &move_priors);
 	float train_step(const MiniBatch *batch);
 	void set_lr(float lr);
+	void build_graph();
+	void bind_train();
+	void bind_predict();
 };
