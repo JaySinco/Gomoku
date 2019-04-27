@@ -6,7 +6,7 @@
   try {
 #define MX_CATCH \
   } catch(dmlc::Error &err) { \
-    LOG(FATAL) << "mxnet failed: " << MXGetLastError(); \
+    std::cout << MXGetLastError() << std::endl; \
     std::exit(-1); \
   }
 
@@ -221,7 +221,6 @@ FIRNet::FIRNet(long long verno) : update_cnt(verno), ctx(Context::cpu()),
 
 float FIRNet::calc_init_lr() {
     float multiplier;
-
     if (update_cnt < LR_DROP_STEP1)
         multiplier = 1.0f;
     else if (update_cnt >= LR_DROP_STEP1 && update_cnt < LR_DROP_STEP2)
@@ -230,7 +229,6 @@ float FIRNet::calc_init_lr() {
         multiplier = 1e-2;
     else
         multiplier = 1e-3;
-
     float lr = INIT_LEARNING_RATE  * multiplier;
     LOG(INFO) << "init learning_rate=" << lr;
     return lr;
@@ -251,13 +249,11 @@ void FIRNet::adjust_lr() {
 }
 
 FIRNet::~FIRNet() {
-    MX_TRY
     delete plc_predict;
     delete val_predict;
     delete loss_train;
     delete optimizer;
     //MXNotifyShutdown();
-    MX_CATCH
 }
 
 void FIRNet::build_graph() {
@@ -318,6 +314,7 @@ std::string FIRNet::make_param_file_name() {
 }
 
 void FIRNet::load_param() {
+    MX_TRY
     auto file_name = make_param_file_name();
     LOG(INFO) << "loading parameters from " << file_name;
     std::map<std::string, NDArray> param_map;
@@ -328,6 +325,7 @@ void FIRNet::load_param() {
         else
             args_map.insert(std::make_pair(param.first, param.second));
     }
+    MX_CATCH
 }
 
 void FIRNet::save_param() {
