@@ -6,37 +6,30 @@
 constexpr int FIVE_IN_ROW = 5;
 constexpr int BOARD_MAX_ROW = 8;
 constexpr int BOARD_MAX_COL = 8;
-constexpr int INPUT_FEATURE_NUM = 4;
+constexpr int INPUT_FEATURE_NUM = 4; // self, opponent[[, lastmove], color]
 constexpr int BATCH_SIZE = 512;
 constexpr int BUFFER_SIZE = 10000;
-constexpr int EPOCH_PER_GAME = 2;
+constexpr int EPOCH_PER_GAME = 1;
 constexpr int TEST_PURE_ITERMAX = 1000;
 constexpr int TRAIN_DEEP_ITERMAX = 400;
 constexpr int EXPLORE_STEP = 20;
 constexpr int NET_NUM_FILTER = 64;
 constexpr int NET_NUM_RESIDUAL_BLOCK = 3;
 constexpr int LR_DROP_STEP1 = 2000;
-constexpr int LR_DROP_STEP2 = 4000;
-constexpr int LR_DROP_STEP3 = 8000;
+constexpr int LR_DROP_STEP2 = 8000;
+constexpr int LR_DROP_STEP3 = 10000;
 constexpr float C_PUCT = 1.0;
 constexpr float INIT_LEARNING_RATE = 2e-1;
 constexpr float WEIGHT_DECAY = 1e-4;
 constexpr float DIRICHLET_ALPHA = 0.3;
-constexpr float NOISE_RATE = 0.25;
+constexpr float NOISE_RATE = 0.2;
 constexpr bool USE_BATCH_NORM = true;
 
 constexpr int MINUTE_PER_LOG = 3;
 constexpr int MINUTE_PER_SAVE = 30;
 constexpr int MINUTE_PER_BENCHMARK = 15;
-
-#ifdef _MSC_VER
 constexpr int COLOR_OCCUPY_SPACE = 2;
 constexpr float BN_MVAR_INIT = 1.0f;
-#endif
-#ifdef __GNUC__
-constexpr int COLOR_OCCUPY_SPACE = 1;
-constexpr float BN_MVAR_INIT = 5.0f;
-#endif
 
 constexpr bool DEBUG_MCTS_PROB = false;
 constexpr bool DEBUG_TRAIN_DATA = false;

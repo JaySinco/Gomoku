@@ -309,6 +309,7 @@ void FIRNet::init_param() {
 std::string FIRNet::make_param_file_name() {
     std::ostringstream filename;
     filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
+        << "_b" << NET_NUM_RESIDUAL_BLOCK << "f" << NET_NUM_FILTER
         << "_" << update_cnt << ".param";
     return filename.str();
 }
@@ -369,11 +370,46 @@ void FIRNet::show_param(std::ostream &out) {
         brief_NDArray(out, aux.first, aux.second);
 }
 
+void random_transform(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) {
+    std::uniform_int_distribution<int> uniform(0, 7);
+    int n = uniform(global_random_engine);
+    int i = 0;
+    while (true) {
+        if (i == n) break;
+        // transpose
+        for (int row = 0; row < BOARD_MAX_ROW; ++row) {
+            for (int col = row + 1; col < BOARD_MAX_COL; ++col) {
+                int a = row * BOARD_MAX_COL + col;
+                int b = col * BOARD_MAX_COL + row;
+                std::iter_swap(data + a, data + b);
+                std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
+                if (INPUT_FEATURE_NUM > 2)
+                    std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
+            }
+        }
+        ++i;
+        if (i == n) break;
+        // flip_verticing
+        for (int row = 0; row < BOARD_MAX_ROW; ++row) {
+            for (int col = 0; col < BOARD_MAX_COL / 2; ++col) {
+                int a = row * BOARD_MAX_COL + col;
+                int b = row * BOARD_MAX_COL + BOARD_MAX_COL - col - 1;
+                std::iter_swap(data + a, data + b);
+                std::iter_swap(data + BOARD_SIZE + a, data + BOARD_SIZE + b);
+                if (INPUT_FEATURE_NUM > 2)
+                    std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
+            }
+        }
+        ++i;
+    }
+}
+
 void FIRNet::forward(const State &state,
         float value[1], std::vector<std::pair<Move, float>> &net_move_priors) {
     MX_TRY
     float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
     state.fill_feature_array(data);
+    random_transform(data);
     data_predict.SyncCopyFromCPU(data, INPUT_FEATURE_NUM * BOARD_SIZE);
     plc_predict->Forward(false);
     val_predict->Forward(false);
