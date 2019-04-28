@@ -308,9 +308,8 @@ void FIRNet::init_param() {
 
 std::string FIRNet::make_param_file_name() {
     std::ostringstream filename;
-    filename << "FIR-" << BOARD_MAX_COL << "x" << BOARD_MAX_ROW << "by" << FIVE_IN_ROW
-        << "_b" << NET_NUM_RESIDUAL_BLOCK << "f" << NET_NUM_FILTER
-        << "_" << update_cnt << ".param";
+    filename << "FIR-" << BOARD_MAX_COL << "x" << NET_NUM_FILTER
+        << "i" << NET_NUM_RESIDUAL_BLOCK << "@" << update_cnt << ".param";
     return filename.str();
 }
 
@@ -370,12 +369,10 @@ void FIRNet::show_param(std::ostream &out) {
         brief_NDArray(out, aux.first, aux.second);
 }
 
-void random_transform(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) {
-    std::uniform_int_distribution<int> uniform(0, 7);
-    int n = uniform(global_random_engine);
-    int i = 0;
+void mapping_data(int id, float data[INPUT_FEATURE_NUM * BOARD_SIZE]) {
+    int n = 0;
     while (true) {
-        if (i == n) break;
+        if (n == id) break;
         // transpose
         for (int row = 0; row < BOARD_MAX_ROW; ++row) {
             for (int col = row + 1; col < BOARD_MAX_COL; ++col) {
@@ -387,8 +384,8 @@ void random_transform(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) {
                     std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
             }
         }
-        ++i;
-        if (i == n) break;
+        ++n;
+        if (n == id) break;
         // flip_verticing
         for (int row = 0; row < BOARD_MAX_ROW; ++row) {
             for (int col = 0; col < BOARD_MAX_COL / 2; ++col) {
@@ -400,8 +397,25 @@ void random_transform(float data[INPUT_FEATURE_NUM * BOARD_SIZE]) {
                     std::iter_swap(data + 2 * BOARD_SIZE + a, data + 2 * BOARD_SIZE + b);
             }
         }
-        ++i;
+        ++n;
     }
+}
+
+Move mapping_move(int id, Move mv) {
+    int n = 0, r, c;
+    while (true) {
+        if (n == id) break;
+        // transpose
+        r = mv.c(), c = mv.r();
+        mv = Move(r, c);
+        ++n;
+        if (n == id) break;
+        // flip_verticing
+        r = mv.r(), c = BOARD_MAX_COL - mv.c() - 1;
+        mv = Move(r, c);
+        ++n;
+    }
+    return mv;
 }
 
 void FIRNet::forward(const State &state,
@@ -409,7 +423,9 @@ void FIRNet::forward(const State &state,
     MX_TRY
     float data[INPUT_FEATURE_NUM * BOARD_SIZE] = { 0.0f };
     state.fill_feature_array(data);
-    random_transform(data);
+    std::uniform_int_distribution<int> uniform(0, 7);
+    int transform_id = uniform(global_random_engine);
+    mapping_data(transform_id, data);
     data_predict.SyncCopyFromCPU(data, INPUT_FEATURE_NUM * BOARD_SIZE);
     plc_predict->Forward(false);
     val_predict->Forward(false);
@@ -417,7 +433,8 @@ void FIRNet::forward(const State &state,
     const float *plc_ptr = plc_predict->outputs[0].GetData();
     float priors_sum = 0.0f;
     for (const auto mv : state.get_options()) {
-        float prior = plc_ptr[mv.z()];
+        Move mapped = mapping_move(transform_id, mv);
+        float prior = plc_ptr[mapped.z()];
         net_move_priors.push_back(std::make_pair(mv, prior));
         priors_sum += prior;
     }

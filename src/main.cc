@@ -20,7 +20,8 @@ const char *train_usage =
 
 const char *play_usage =
     "usage: gomoku play <color> <net> [itermax]\n"
-    "   <color>    [0] if human take first hand, [1] otherwise\n"
+    "   <color>    '0' if human take first hand, '1' otherwise\n"
+    "              specially '-1' means let computer selfplay\n"
     "   <net>      verno of network(must > 0), which is the suffix of parameter file basename\n"
     "   [itermax]  itermax for mcts deep player\n"
     "              if not given, default from global configure\n\n";
@@ -59,14 +60,21 @@ int main(int argc, char *argv[]) {
             if (argc == 5)
                 itermax = std::atoi(argv[4]);
             std::cout << "mcts_itermax=" << itermax << std::endl;
-            auto p0 = HumanPlayer("human");
             long long verno = std::atoi(argv[3]);
             auto net = std::make_shared<FIRNet>(verno);
             auto p1 = MCTSDeepPlayer(net, itermax, C_PUCT);
-            if (strcmp(argv[2], "0") == 0)
+            if (strcmp(argv[2], "0") == 0) {
+                auto p0 = HumanPlayer("human");
                 play(p0, p1, false);
-            else if (strcmp(argv[2], "1") == 0)
+            }
+            else if (strcmp(argv[2], "1") == 0) {
+                auto p0 = HumanPlayer("human");
                 play(p1, p0, false);
+            }
+            else if (strcmp(argv[2], "-1") == 0) {
+                auto p0 = MCTSDeepPlayer(net, itermax, C_PUCT);
+                play(p0, p1, false);
+            }
             return 0;
         }
         EXIT_WITH_USAGE(play_usage);
