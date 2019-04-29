@@ -20,8 +20,8 @@ Color operator~(const Color c) {
 std::ostream &operator<<(std::ostream &out, Color c) {
     switch (c) {
     case Color::Empty: out << ((COLOR_OCCUPY_SPACE == 2) ? "  " : " "); break;
-    case Color::Black: out << "●"; break;
-    case Color::White: out << "○"; break;
+    case Color::Black: out << ((COLOR_OCCUPY_SPACE == 2) ? "●"  : "x"); break;
+    case Color::White: out << ((COLOR_OCCUPY_SPACE == 2) ? "○"  : "o"); break;
     }
     return out;
 }
@@ -143,6 +143,7 @@ Player &play(Player &p1, Player &p2, bool silent) {
     p1.reset();
     p2.reset();
     int turn = 0;
+    if (!silent) std::cout << game << std::endl;
     while (!game.over()) {
         auto player = player_color.at(game.current());
         auto act = player->play(game);

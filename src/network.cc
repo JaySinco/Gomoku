@@ -27,7 +27,6 @@ void SampleData::flip_verticing() {
 }
 
 void SampleData::transpose() {
-    assert(BOARD_MAX_ROW == BOARD_MAX_COL);
     for (int row = 0; row < BOARD_MAX_ROW; ++row) {
         for (int col = row + 1; col < BOARD_MAX_COL; ++col) {
             int a = row * BOARD_MAX_COL + col;
@@ -47,11 +46,11 @@ std::ostream &operator<<(std::ostream &out, const SampleData &sample) {
     for (int row = 0; row < BOARD_MAX_ROW; ++row) {
         for (int col = 0; col < BOARD_MAX_COL; ++col) {
             if (sample.data[row * BOARD_MAX_COL + col] > 0)
-                out << "●";
+                out << Color::Black;
             else if (sample.data[BOARD_SIZE + row * BOARD_MAX_COL + col] > 0)
-                out << "○";
+                out << Color::White;
             else
-                out << "  ";
+                out << Color::Empty;
             if (INPUT_FEATURE_NUM > 2) {
                 if (sample.data[2 * BOARD_SIZE + row * BOARD_MAX_COL + col] > 0) {
                     assert(last.z() == NO_MOVE_YET);

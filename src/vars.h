@@ -4,8 +4,8 @@
 #include <iostream>
 
 constexpr int FIVE_IN_ROW = 5;
-constexpr int BOARD_MAX_ROW = 8;
 constexpr int BOARD_MAX_COL = 8;
+constexpr int BOARD_MAX_ROW = BOARD_MAX_COL;
 constexpr int INPUT_FEATURE_NUM = 4; // self, opponent[[, lastmove], color]
 constexpr int BATCH_SIZE = 512;
 constexpr int BUFFER_SIZE = 10000;
@@ -28,7 +28,7 @@ constexpr bool USE_BATCH_NORM = true;
 constexpr int MINUTE_PER_LOG = 3;
 constexpr int MINUTE_PER_SAVE = 30;
 constexpr int MINUTE_PER_BENCHMARK = 15;
-constexpr int COLOR_OCCUPY_SPACE = 2;
+constexpr int COLOR_OCCUPY_SPACE = 1;
 constexpr float BN_MVAR_INIT = 1.0f;
 
 constexpr bool DEBUG_MCTS_PROB = false;
