@@ -20,7 +20,7 @@ These are common Gomoku commands used in various situations:
 
 ## Demo
 The model supplied has 8x8 board size, 64 filters, 3 residual blocks, 
-trained on 1cpu for about 1.5 days, 9336 backward updates to the network.  
-![image](https://github.com/JaySinco/Gomoku/master/play_against_ai.gif)  
+trained on 1cpu for about 1.5 days, 9336 backward updates to the network.    
+![image]( https://github.com/JaySinco/Gomoku/blob/master/play_against_ai.gif)  
 Above shows a game played between human(first hand, represented by `x`) and AI(represented by `o`) 
 using pretrained model with command `gomoku play 0 9336`.  
